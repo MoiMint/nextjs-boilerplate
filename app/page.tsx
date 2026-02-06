@@ -1,65 +1,94 @@
-import Image from "next/image";
+import Link from "next/link";
+
+const pillars = [
+  {
+    title: "Prompt Master",
+    description:
+      "Thực hành tạo sản phẩm thật từ dữ liệu thô: email, kế hoạch kinh doanh, kịch bản truyền thông.",
+  },
+  {
+    title: "Clean Prompt Arena",
+    description:
+      "Đấu hạng accuracy/tokens để luyện viết prompt ngắn gọn, chính xác, tối ưu chi phí AI.",
+  },
+  {
+    title: "AI Auditor & Agent Architect",
+    description:
+      "Phát hiện ảo giác AI, thiết kế agent có guardrails, quy trình và cơ chế kiểm soát rủi ro.",
+  },
+];
+
+const audiences = [
+  "Học sinh - sinh viên",
+  "Nhân viên văn phòng",
+  "Đội ngũ doanh nghiệp SME",
+  "Team chuyển đổi số",
+];
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="min-h-screen bg-slate-950 text-slate-100">
+      <section className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-16 md:px-10">
+        <header className="rounded-3xl border border-white/10 bg-gradient-to-br from-indigo-600/30 via-slate-900 to-cyan-700/20 p-8 md:p-12">
+          <p className="mb-3 inline-flex rounded-full border border-cyan-300/30 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">
+            Blabla - AI Command Simulator
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+          <h1 className="max-w-3xl text-3xl font-bold leading-tight md:text-5xl">
+            Nền tảng mô phỏng giúp người dùng làm chủ AI bằng tư duy hệ thống
+          </h1>
+          <p className="mt-5 max-w-2xl text-sm text-slate-300 md:text-base">
+            Không học prompt mẫu, không học lý thuyết suông. Blabla tập trung vào learning by doing:
+            giao nhiệm vụ thật, chấm điểm đa AI và vinh danh theo hiệu suất thực chiến.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-4">
+            <Link
+              href="/login"
+              className="rounded-xl bg-cyan-400 px-6 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-300"
+            >
+              Bắt đầu dùng thử
+            </Link>
+            <a
+              href="#features"
+              className="rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-200"
+            >
+              Xem tính năng
+            </a>
+          </div>
+        </header>
+
+        <section>
+          <h2 className="text-2xl font-bold">Đối tượng phù hợp</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {audiences.map((item) => (
+              <div key={item} className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
+                {item}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="features" className="grid gap-4 md:grid-cols-3">
+          {pillars.map((pillar) => (
+            <article
+              key={pillar.title}
+              className="rounded-2xl border border-white/10 bg-slate-900/70 p-6 shadow-lg shadow-indigo-950/30"
+            >
+              <h3 className="text-lg font-semibold text-cyan-200">{pillar.title}</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-300">{pillar.description}</p>
+            </article>
+          ))}
+        </section>
+
+        <section className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-6">
+          <h2 className="text-xl font-semibold text-emerald-200">Lộ trình sử dụng</h2>
+          <ol className="mt-4 list-decimal space-y-2 pl-6 text-sm text-slate-200">
+            <li>Đăng nhập và chọn chuyên môn (marketing, kế toán, IT...)</li>
+            <li>Tham gia sandbox có ràng buộc thời gian và dữ liệu</li>
+            <li>Nhận phản hồi, điểm số, token-efficiency và thứ hạng leaderboard</li>
+            <li>Tiến hóa thành AI Auditor và Agent Architect</li>
+          </ol>
+        </section>
+      </section>
+    </main>
   );
 }
