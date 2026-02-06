@@ -42,10 +42,16 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-wrap gap-4">
             <Link
-              href="/login"
+              href="/register"
               className="rounded-xl bg-cyan-400 px-6 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-300"
             >
-              Bắt đầu dùng thử
+              Tạo tài khoản miễn phí
+            </Link>
+            <Link
+              href="/login"
+              className="rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-200"
+            >
+              Đăng nhập
             </Link>
             <a
               href="#features"
