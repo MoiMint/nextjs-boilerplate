@@ -42,6 +42,9 @@ export default function RegisterPage() {
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900 p-8 shadow-2xl shadow-cyan-500/10">
         <p className="text-sm text-cyan-300">Tạo tài khoản Blabla</p>
         <h1 className="mt-2 text-2xl font-bold">Create your account</h1>
+        <div className="mt-3">
+          <Link href="/" className="text-sm font-medium text-slate-300 hover:text-cyan-300">← Quay lại trang chủ</Link>
+        </div>
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-lg border border-white/15 bg-slate-800 px-3 py-2" placeholder="Họ tên" />
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-white/15 bg-slate-800 px-3 py-2" placeholder="Email" />

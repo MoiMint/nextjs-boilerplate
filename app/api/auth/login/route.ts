@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { newId, readDB, writeDB } from "@/app/lib/server-db";
+import { createSessionToken, readDB, writeDB } from "@/app/lib/server-db";
 
 export async function POST(request: NextRequest) {
   const { email, password } = (await request.json()) as { email?: string; password?: string };
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Thông tin đăng nhập không đúng." }, { status: 401 });
   }
 
-  const token = newId("sess");
+  const token = createSessionToken(user.id);
   db.sessions.push({ token, userId: user.id, createdAt: new Date().toISOString() });
   await writeDB(db);
 

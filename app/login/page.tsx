@@ -40,6 +40,9 @@ export default function LoginPage() {
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900 p-8 shadow-2xl shadow-cyan-500/10">
         <p className="text-sm text-cyan-300">Đăng nhập hệ thống Blabla (Online)</p>
         <h1 className="mt-2 text-2xl font-bold">Welcome back</h1>
+        <div className="mt-3">
+          <Link href="/" className="text-sm font-medium text-slate-300 hover:text-cyan-300">← Quay lại trang chủ</Link>
+        </div>
         <p className="mt-1 text-xs text-amber-300">Admin mặc định: admin@blabla.ai / 123456</p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">

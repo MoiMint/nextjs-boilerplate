@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { newId, readDB, writeDB } from "@/app/lib/server-db";
+import { createSessionToken, newId, readDB, writeDB } from "@/app/lib/server-db";
 
 export async function POST(request: NextRequest) {
   const { name, email, password, role } = (await request.json()) as {
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   };
   db.users.push(user);
 
-  const token = newId("sess");
+  const token = createSessionToken(user.id);
   db.sessions.push({ token, userId: user.id, createdAt: new Date().toISOString() });
   await writeDB(db);
 
