@@ -1,0 +1,16 @@
+{
+  "users": [
+    {
+      "id": "admin-seed",
+      "name": "Admin Blabla",
+      "email": "admin@blabla.ai",
+      "password": "123456",
+      "role": "admin",
+      "isAdmin": true,
+      "createdAt": "1970-01-01T00:00:00.000Z"
+    }
+  ],
+  "sessions": [],
+  "histories": [],
+  "posts": []
+}
