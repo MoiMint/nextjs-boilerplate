@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type User = { id: string; name: string; email: string; role: string; isAdmin: boolean };
+type User = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  isAdmin: boolean;
+  createdAt?: string;
+  stats?: { historyCount: number; postCount: number; lastSessionAt: string | null };
+};
 type HistoryItem = { id: string; title: string; score: number; feedback: string; createdAt: string };
 type Post = { id: string; userName: string; content: string; createdAt: string };
 type Tab = "master" | "arena" | "auditor" | "history" | "community" | "admin";
@@ -19,6 +27,7 @@ export default function WorkspacePage() {
   const [histories, setHistories] = useState<HistoryItem[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   const [prompt, setPrompt] = useState("");
   const [communityInput, setCommunityInput] = useState("");
@@ -79,6 +88,16 @@ export default function WorkspacePage() {
       loadUsers();
     }
   }, [me, loadUsers]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const timer = setInterval(() => {
+      void loadPosts();
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [token, loadPosts]);
 
   const submit = async (type: "master" | "arena" | "auditor") => {
     setLoading(true);
@@ -215,10 +234,30 @@ export default function WorkspacePage() {
                 <div className="mt-4 space-y-2">
                   {allUsers.map((user) => (
                     <div key={user.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
-                      {user.name} - {user.email} ({user.role})
+                      <div className="flex items-center justify-between gap-3">
+                        <p>{user.name} - {user.email} ({user.role})</p>
+                        <button
+                          onClick={() => setSelectedUser(user)}
+                          className="rounded-md border border-cyan-300/40 px-2 py-1 text-xs text-cyan-200"
+                        >
+                          Xem chi tiết
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
+
+                {selectedUser ? (
+                  <div className="mt-4 rounded-lg border border-cyan-300/30 bg-slate-900/80 p-4 text-sm">
+                    <p className="font-semibold text-cyan-200">Chi tiết tài khoản: {selectedUser.name}</p>
+                    <p>Email: {selectedUser.email}</p>
+                    <p>Vai trò: {selectedUser.role}</p>
+                    <p>Ngày tạo: {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleString("vi-VN") : "-"}</p>
+                    <p>Số bài đã nộp: {selectedUser.stats?.historyCount ?? 0}</p>
+                    <p>Số bài cộng đồng: {selectedUser.stats?.postCount ?? 0}</p>
+                    <p>Đăng nhập gần nhất: {selectedUser.stats?.lastSessionAt ? new Date(selectedUser.stats.lastSessionAt).toLocaleString("vi-VN") : "-"}</p>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
