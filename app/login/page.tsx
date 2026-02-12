@@ -1,38 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-
-type User = {
-  name: string;
-  email: string;
-  password: string;
-  role: string;
-  createdAt: string;
-};
-
-const USERS_KEY = "blabla-users";
-const SESSION_KEY = "blabla-session";
-
-function getUsers(): User[] {
-  if (typeof window === "undefined") return [];
-
-  const raw = localStorage.getItem(USERS_KEY);
-  if (!raw) return [];
-
-  try {
-    return JSON.parse(raw) as User[];
-  } catch {
-    return [];
-  }
-}
+import { getUsers, SESSION_KEY } from "../lib/client-auth";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+
+  useMemo(() => getUsers(), []);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -62,6 +41,7 @@ export default function LoginPage() {
         email: account.email,
         name: account.name,
         role: account.role,
+        isAdmin: account.isAdmin || account.role === "admin",
         loggedAt: new Date().toISOString(),
       }),
     );
@@ -75,6 +55,7 @@ export default function LoginPage() {
         <p className="text-sm text-cyan-300">Đăng nhập hệ thống Blabla</p>
         <h1 className="mt-2 text-2xl font-bold">Welcome back</h1>
         <p className="mt-2 text-sm text-slate-300">Đăng nhập để tiếp tục luyện tập và xem lịch sử bài nộp.</p>
+        <p className="mt-1 text-xs text-amber-300">Admin mặc định: admin@blabla.ai / 123456</p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <label className="block text-sm">

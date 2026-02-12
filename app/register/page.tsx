@@ -1,32 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-
-type User = {
-  name: string;
-  email: string;
-  password: string;
-  role: string;
-  createdAt: string;
-};
-
-const USERS_KEY = "blabla-users";
-const SESSION_KEY = "blabla-session";
-
-function getUsers(): User[] {
-  if (typeof window === "undefined") return [];
-
-  const raw = localStorage.getItem(USERS_KEY);
-  if (!raw) return [];
-
-  try {
-    return JSON.parse(raw) as User[];
-  } catch {
-    return [];
-  }
-}
+import { getUsers, saveUsers, SESSION_KEY, type User } from "../lib/client-auth";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -35,6 +12,8 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("office");
   const [error, setError] = useState("");
+
+  useMemo(() => getUsers(), []);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -63,16 +42,18 @@ export default function RegisterPage() {
       email,
       password,
       role,
+      isAdmin: false,
       createdAt: new Date().toISOString(),
     };
 
-    localStorage.setItem(USERS_KEY, JSON.stringify([...users, newUser]));
+    saveUsers([...users, newUser]);
     localStorage.setItem(
       SESSION_KEY,
       JSON.stringify({
         email: newUser.email,
         name: newUser.name,
         role: newUser.role,
+        isAdmin: false,
         loggedAt: new Date().toISOString(),
       }),
     );
