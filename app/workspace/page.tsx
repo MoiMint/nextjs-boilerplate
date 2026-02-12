@@ -1,318 +1,181 @@
 "use client";
-
-import { useEffect, useMemo, useState } from "react";
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getUsers, HISTORY_KEY, saveUsers, SESSION_KEY, type Session, type User } from "../lib/client-auth";
 
-type HistoryItem = {
-  id: string;
-  type: "master" | "arena" | "auditor";
-  title: string;
-  score: number;
-  feedback: string;
-  createdAt: string;
-};
+type User = { id: string; name: string; email: string; role: string; isAdmin: boolean };
+type HistoryItem = { id: string; title: string; score: number; feedback: string; createdAt: string };
+type Post = { id: string; userName: string; content: string; createdAt: string };
+type Tab = "master" | "arena" | "auditor" | "history" | "community" | "admin";
 
-type Tab = "master" | "arena" | "auditor" | "history" | "admin";
-
-const roleLabel: Record<string, string> = {
-  student: "Học sinh / Sinh viên",
-  office: "Nhân viên văn phòng",
-  business: "Doanh nghiệp",
-  admin: "Quản trị viên",
-};
-
-const arenaReference = "0123456789, 0987654321, 0911222333";
-
-function roughTokenCount(text: string) {
-  return text.trim() ? text.trim().split(/\s+/).length : 0;
-}
-
-function scorePromptMaster(prompt: string) {
-  const checks = ["vai trò", "mục tiêu", "định dạng", "5 hành động"];
-  const normalized = prompt.toLowerCase();
-  const passed = checks.filter((keyword) => normalized.includes(keyword)).length;
-  return {
-    score: Math.min(100, 35 + passed * 16 + Math.max(0, 20 - roughTokenCount(prompt))),
-    feedback:
-      passed >= 3
-        ? "Prompt có cấu trúc khá tốt, có thể đưa thêm ràng buộc dữ liệu để ổn định đầu ra."
-        : "Prompt còn thiếu structure. Hãy bổ sung vai trò, mục tiêu, format output và 5 hành động.",
-  };
-}
+const SESSION_TOKEN_KEY = "blabla-session-token";
 
 export default function WorkspacePage() {
   const router = useRouter();
+  const [me, setMe] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("master");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ score: number; feedback: string } | null>(null);
-  const [aiFeedback, setAiFeedback] = useState<string>("");
+  const [histories, setHistories] = useState<HistoryItem[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
 
-  const session: Session | null = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    const rawSession = localStorage.getItem(SESSION_KEY);
-    if (!rawSession) return null;
-
-    try {
-      return JSON.parse(rawSession) as Session;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const [history, setHistory] = useState<HistoryItem[]>(() => {
-    if (typeof window === "undefined") return [];
-    const rawHistory = localStorage.getItem(HISTORY_KEY);
-    if (!rawHistory) return [];
-    try {
-      return JSON.parse(rawHistory) as HistoryItem[];
-    } catch {
-      return [];
-    }
-  });
-
-  const [masterRaw, setMasterRaw] = useState(
-    "Biên bản họp 10 trang lộn xộn, nhiều ý trùng lặp về deadline và người phụ trách.",
-  );
-  const [masterGoal, setMasterGoal] = useState("Tạo danh sách 5 hành động ưu tiên trong tuần này.");
-  const [masterPrompt, setMasterPrompt] = useState("");
-
-  const [arenaPrompt, setArenaPrompt] = useState("");
-  const [auditorGuardrails, setAuditorGuardrails] = useState("");
-  const [auditorArchitecture, setAuditorArchitecture] = useState("");
-
+  const [prompt, setPrompt] = useState("");
+  const [communityInput, setCommunityInput] = useState("");
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [adminMessage, setAdminMessage] = useState("");
-  const [allUsers, setAllUsers] = useState<User[]>(() => (typeof window === "undefined" ? [] : getUsers()));
+  const [adminPass, setAdminPass] = useState("");
+  const [adminMsg, setAdminMsg] = useState("");
 
-  useEffect(() => {
-    if (!session) {
-      router.push("/login");
-    }
-  }, [router, session]);
+  const token = typeof window !== "undefined" ? localStorage.getItem(SESSION_TOKEN_KEY) : null;
 
-  const tokenMaster = useMemo(() => roughTokenCount(masterPrompt), [masterPrompt]);
-  const tokenArena = useMemo(() => roughTokenCount(arenaPrompt), [arenaPrompt]);
-  const tokenAuditor = useMemo(
-    () => roughTokenCount(auditorGuardrails) + roughTokenCount(auditorArchitecture),
-    [auditorGuardrails, auditorArchitecture],
+  const authHeaders = useMemo(
+    () => ({ "Content-Type": "application/json", "x-session-token": token ?? "" }),
+    [token],
   );
 
-  const avgScore = useMemo(() => {
-    if (!history.length) return 0;
-    return Math.round(history.reduce((sum, item) => sum + item.score, 0) / history.length);
-  }, [history]);
-
-  const persistHistory = (item: HistoryItem) => {
-    const nextHistory = [item, ...history].slice(0, 30);
-    setHistory(nextHistory);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(nextHistory));
-  };
-
-  const runAiJudge = async (context: string, prompt: string) => {
-    try {
-      const response = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context, prompt }),
-      });
-      const data = (await response.json()) as { score?: number; feedback?: string; error?: string };
-      if (!response.ok) {
-        setAiFeedback(data.error ?? "AI chưa sẵn sàng. Hãy kiểm tra cấu hình API key.");
-        return null;
-      }
-      setAiFeedback(data.feedback ?? "");
-      return { score: data.score ?? 70, feedback: data.feedback ?? "" };
-    } catch {
-      setAiFeedback("Không gọi được AI server.");
-      return null;
-    }
-  };
-
-  const submitMaster = async () => {
-    setLoading(true);
-    setResult(null);
-    const localScore = scorePromptMaster(masterPrompt);
-    const ai = await runAiJudge("Prompt Master", `${masterRaw}\nGoal: ${masterGoal}\nPrompt: ${masterPrompt}`);
-    const output = ai ?? localScore;
-    setResult(output);
-    persistHistory({
-      id: crypto.randomUUID(),
-      type: "master",
-      title: "Prompt Master",
-      score: output.score,
-      feedback: output.feedback,
-      createdAt: new Date().toISOString(),
-    });
-    setLoading(false);
-  };
-
-  const submitArena = async () => {
-    setLoading(true);
-    setResult(null);
-    const local = {
-      score: Math.min(100, Math.max(40, 100 - tokenArena * 2)),
-      feedback: tokenArena <= 12 ? "Prompt gọn, khá tối ưu token." : "Có thể rút ngắn prompt để tăng efficiency.",
-    };
-    const ai = await runAiJudge("Clean Prompt Arena", `Input: ${arenaReference}\nPrompt: ${arenaPrompt}`);
-    const output = ai ?? local;
-    setResult(output);
-    persistHistory({
-      id: crypto.randomUUID(),
-      type: "arena",
-      title: "Clean Prompt Arena",
-      score: output.score,
-      feedback: output.feedback,
-      createdAt: new Date().toISOString(),
-    });
-    setLoading(false);
-  };
-
-  const submitAuditor = async () => {
-    setLoading(true);
-    setResult(null);
-    const ai = await runAiJudge(
-      "AI Auditor & Agent Architect",
-      `Guardrails: ${auditorGuardrails}\nArchitecture: ${auditorArchitecture}`,
-    );
-    const output = ai ?? { score: 75, feedback: "Bổ sung thêm điều kiện fail-safe và phân quyền theo cấp độ." };
-    setResult(output);
-    persistHistory({
-      id: crypto.randomUUID(),
-      type: "auditor",
-      title: "AI Auditor",
-      score: output.score,
-      feedback: output.feedback,
-      createdAt: new Date().toISOString(),
-    });
-    setLoading(false);
-  };
-
-  const createAdmin = () => {
-    if (!adminName || !adminEmail || !adminPassword) {
-      setAdminMessage("Vui lòng nhập đủ thông tin admin mới.");
+  const loadMe = useCallback(async () => {
+    const res = await fetch("/api/me", { headers: { "x-session-token": token ?? "" } });
+    if (!res.ok) {
+      router.push("/login");
       return;
     }
-    const users = getUsers();
-    if (users.some((u) => u.email.toLowerCase() === adminEmail.toLowerCase())) {
-      setAdminMessage("Email đã tồn tại.");
+    const data = (await res.json()) as { user: User };
+    setMe(data.user);
+  }, [router, token]);
+
+  const loadHistories = useCallback(async () => {
+    const res = await fetch("/api/history", { headers: { "x-session-token": token ?? "" } });
+    if (!res.ok) return;
+    const data = (await res.json()) as { histories: HistoryItem[] };
+    setHistories(data.histories);
+  }, [token]);
+
+  const loadPosts = useCallback(async () => {
+    const res = await fetch("/api/posts");
+    const data = (await res.json()) as { posts: Post[] };
+    setPosts(data.posts);
+  }, []);
+
+  const loadUsers = useCallback(async () => {
+    const res = await fetch("/api/admin/users", { headers: { "x-session-token": token ?? "" } });
+    if (!res.ok) return;
+    const data = (await res.json()) as { users: User[] };
+    setAllUsers(data.users);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) {
+      router.push("/login");
       return;
     }
+    loadMe();
+    loadHistories();
+    loadPosts();
+  }, [router, token, loadMe, loadHistories, loadPosts]);
 
-    const newAdmin: User = {
-      name: adminName,
-      email: adminEmail,
-      password: adminPassword,
-      role: "admin",
-      isAdmin: true,
-      createdAt: new Date().toISOString(),
-    };
-    const next = [...users, newAdmin];
-    saveUsers(next);
-    setAllUsers(next);
-    setAdminMessage("Tạo admin mới thành công.");
-    setAdminName("");
-    setAdminEmail("");
-    setAdminPassword("");
+  useEffect(() => {
+    if (me?.isAdmin) {
+      loadUsers();
+    }
+  }, [me, loadUsers]);
+
+  const submit = async (type: "master" | "arena" | "auditor") => {
+    setLoading(true);
+    setResult(null);
+
+    const aiRes = await fetch("/api/ai", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ context: type, prompt }),
+    });
+
+    const aiData = (await aiRes.json()) as { score?: number; feedback?: string; error?: string };
+    const output = aiRes.ok
+      ? { score: aiData.score ?? 70, feedback: aiData.feedback ?? "Không có phản hồi." }
+      : { score: 65, feedback: aiData.error ?? "Fallback local scoring." };
+
+    setResult(output);
+
+    await fetch("/api/history", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ type, title: `Task ${type.toUpperCase()}`, score: output.score, feedback: output.feedback }),
+    });
+
+    await loadHistories();
+    setLoading(false);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem(SESSION_KEY);
-    router.push("/login");
+  const postCommunity = async () => {
+    await fetch("/api/posts", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ content: communityInput }),
+    });
+    setCommunityInput("");
+    loadPosts();
   };
 
-  if (!session) {
-    return <main className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">Đang tải workspace...</main>;
-  }
+  const createAdmin = async () => {
+    const res = await fetch("/api/admin/create", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ name: adminName, email: adminEmail, password: adminPass }),
+    });
+    const data = (await res.json()) as { error?: string };
+    setAdminMsg(res.ok ? "Tạo admin thành công." : data.error ?? "Lỗi tạo admin.");
+    if (res.ok) {
+      setAdminName("");
+      setAdminEmail("");
+      setAdminPass("");
+      loadUsers();
+    }
+  };
+
+  const avgScore = histories.length
+    ? Math.round(histories.reduce((sum, item) => sum + item.score, 0) / histories.length)
+    : 0;
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 md:px-8 md:py-8">
       <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[240px_1fr]">
         <aside className="rounded-2xl border border-white/10 bg-slate-900 p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Blabla Simulator</p>
-          <h1 className="mt-2 text-lg font-bold">{session.name}</h1>
-          <p className="text-sm text-slate-300">{session.email}</p>
-          <p className="mt-1 text-sm text-slate-400">{roleLabel[session.role] ?? "Người dùng"}</p>
-
-          <div className="mt-6 space-y-2">
-            {[
-              ["master", "Prompt Master"],
-              ["arena", "Clean Prompt Arena"],
-              ["auditor", "AI Auditor"],
-              ["history", "Lịch sử & phân tích"],
-              ...(session.isAdmin ? [["admin", "Admin Control"]] : []),
-            ].map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => {
-                  setActiveTab(key as Tab);
-                  setResult(null);
-                  setAiFeedback("");
-                }}
-                className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-all duration-300 ${
-                  activeTab === key ? "bg-cyan-400 text-slate-950 translate-x-1" : "bg-white/5 hover:bg-white/10"
-                }`}
-              >
-                {label}
+          <h1 className="text-lg font-bold">{me?.name ?? "Loading..."}</h1>
+          <p className="text-sm text-slate-300">{me?.email}</p>
+          <div className="mt-5 space-y-2">
+            {["master", "arena", "auditor", "history", "community", ...(me?.isAdmin ? ["admin"] : [])].map((key) => (
+              <button key={key} onClick={() => setActiveTab(key as Tab)} className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-all duration-300 ${activeTab === key ? "bg-cyan-400 text-slate-950" : "bg-white/5"}`}>
+                {key}
               </button>
             ))}
           </div>
-
-          <button onClick={handleLogout} className="mt-8 w-full rounded-lg border border-white/20 px-3 py-2 text-sm hover:border-cyan-300">
-            Đăng xuất
-          </button>
+          <button onClick={() => { localStorage.removeItem(SESSION_TOKEN_KEY); router.push('/login'); }} className="mt-6 w-full rounded-lg border border-white/20 px-3 py-2">Đăng xuất</button>
         </aside>
 
         <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-900/50 p-4 scrollbar-pro max-h-[84vh] overflow-y-auto">
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs text-slate-300">Bài đã nộp</p><p className="mt-1 text-2xl font-bold">{history.length}</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs text-slate-300">Điểm trung bình</p><p className="mt-1 text-2xl font-bold text-emerald-300">{avgScore}%</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs text-slate-300">Xếp hạng giả lập</p><p className="mt-1 text-2xl font-bold text-cyan-300">#{Math.max(1, 100 - avgScore)}</p></div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Bài của tôi</p><p className="text-2xl font-bold">{histories.length}</p></div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Điểm TB</p><p className="text-2xl font-bold">{avgScore}%</p></div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Bài cộng đồng</p><p className="text-2xl font-bold">{posts.length}</p></div>
           </div>
 
           <div key={activeTab} className="tab-panel">
-            {activeTab === "master" && (
+            {(activeTab === "master" || activeTab === "arena" || activeTab === "auditor") && (
               <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
-                <h2 className="text-xl font-semibold text-cyan-200">Prompt Master</h2>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <textarea value={masterRaw} onChange={(e) => setMasterRaw(e.target.value)} className="h-28 rounded-lg border border-white/15 bg-slate-800 p-2" />
-                  <textarea value={masterGoal} onChange={(e) => setMasterGoal(e.target.value)} className="h-28 rounded-lg border border-white/15 bg-slate-800 p-2" />
-                </div>
-                <textarea value={masterPrompt} onChange={(e) => setMasterPrompt(e.target.value)} className="mt-3 h-32 w-full rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Nhập prompt..." />
-                <p className="mt-2 text-xs text-slate-400">Token meter: {tokenMaster}</p>
-                <button onClick={submitMaster} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">{loading ? "AI đang chấm..." : "Nộp bài"}</button>
-              </div>
-            )}
-
-            {activeTab === "arena" && (
-              <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
-                <h2 className="text-xl font-semibold text-cyan-200">Clean Prompt Arena</h2>
-                <p className="mt-2 rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">Input: {arenaReference}</p>
-                <textarea value={arenaPrompt} onChange={(e) => setArenaPrompt(e.target.value)} className="mt-3 h-28 w-full rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Prompt tối ưu..." />
-                <p className="mt-2 text-xs text-slate-400">Token meter: {tokenArena}</p>
-                <button onClick={submitArena} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">{loading ? "AI đang đối soát..." : "Nộp bài Arena"}</button>
-              </div>
-            )}
-
-            {activeTab === "auditor" && (
-              <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
-                <h2 className="text-xl font-semibold text-cyan-200">AI Auditor & Agent Architect</h2>
-                <textarea value={auditorGuardrails} onChange={(e) => setAuditorGuardrails(e.target.value)} className="mt-3 h-28 w-full rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Guardrails..." />
-                <textarea value={auditorArchitecture} onChange={(e) => setAuditorArchitecture(e.target.value)} className="mt-3 h-28 w-full rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Persona -> Task -> Tools..." />
-                <p className="mt-2 text-xs text-slate-400">Token meter: {tokenAuditor}</p>
-                <button onClick={submitAuditor} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">{loading ? "AI đang loop testing..." : "Nộp bài Auditor"}</button>
+                <h2 className="text-xl font-semibold text-cyan-200">{activeTab.toUpperCase()}</h2>
+                <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} className="mt-3 h-32 w-full rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Nhập prompt..." />
+                <button onClick={() => submit(activeTab)} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">{loading ? "AI đang chấm..." : "Nộp bài"}</button>
               </div>
             )}
 
             {activeTab === "history" && (
               <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
-                <h2 className="text-xl font-semibold text-cyan-200">Lịch sử nộp bài</h2>
+                <h2 className="text-xl font-semibold text-cyan-200">Lịch sử của riêng bạn</h2>
                 <div className="mt-4 space-y-3">
-                  {history.map((item) => (
+                  {histories.map((item) => (
                     <article key={item.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-4">
-                      <div className="flex items-center justify-between"><p>{item.title}</p><p className="font-bold text-emerald-300">{item.score}%</p></div>
+                      <div className="flex justify-between"><p>{item.title}</p><p className="font-bold text-emerald-300">{item.score}%</p></div>
                       <p className="text-sm text-slate-300">{item.feedback}</p>
                     </article>
                   ))}
@@ -320,24 +183,39 @@ export default function WorkspacePage() {
               </div>
             )}
 
-            {activeTab === "admin" && session.isAdmin && (
+            {activeTab === "community" && (
+              <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+                <h2 className="text-xl font-semibold text-cyan-200">Cộng đồng (Online)</h2>
+                <div className="mt-3 flex gap-2">
+                  <input value={communityInput} onChange={(e) => setCommunityInput(e.target.value)} className="flex-1 rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Chia sẻ prompt, tip..." />
+                  <button onClick={postCommunity} className="rounded-lg bg-cyan-400 px-3 py-2 font-semibold text-slate-950">Đăng</button>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {posts.map((post) => (
+                    <div key={post.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3">
+                      <p className="text-sm font-semibold text-cyan-200">{post.userName}</p>
+                      <p className="text-sm">{post.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "admin" && me?.isAdmin && (
               <div className="rounded-2xl border border-amber-300/20 bg-amber-400/10 p-5">
                 <h2 className="text-xl font-semibold text-amber-200">Admin Control</h2>
-                <p className="text-sm text-slate-200">Xem toàn bộ tài khoản và tạo thêm admin mới.</p>
-
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
                   <input value={adminName} onChange={(e) => setAdminName(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên admin" />
                   <input value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Email admin" />
-                  <input value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Mật khẩu" />
+                  <input value={adminPass} onChange={(e) => setAdminPass(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Password" />
                 </div>
-                <button onClick={createAdmin} className="mt-3 rounded-lg bg-amber-300 px-4 py-2 font-semibold text-slate-950">Tạo admin mới</button>
-                {adminMessage ? <p className="mt-2 text-sm text-amber-100">{adminMessage}</p> : null}
+                <button onClick={createAdmin} className="mt-2 rounded-lg bg-amber-300 px-4 py-2 font-semibold text-slate-950">Tạo admin mới</button>
+                {adminMsg ? <p className="mt-2 text-sm">{adminMsg}</p> : null}
 
                 <div className="mt-4 space-y-2">
-                  {allUsers.map((u) => (
-                    <div key={u.email} className="rounded-lg border border-white/10 bg-slate-900/70 p-3 text-sm">
-                      <p className="font-semibold">{u.name} - {u.email}</p>
-                      <p className="text-slate-300">Role: {u.role} {u.isAdmin ? "(Admin)" : ""}</p>
+                  {allUsers.map((user) => (
+                    <div key={user.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
+                      {user.name} - {user.email} ({user.role})
                     </div>
                   ))}
                 </div>
@@ -345,14 +223,7 @@ export default function WorkspacePage() {
             )}
           </div>
 
-          {result ? (
-            <div className="rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-4">
-              <p className="text-sm text-emerald-200">Kết quả chấm</p>
-              <p className="text-xl font-bold">{result.score}%</p>
-              <p className="text-sm">{result.feedback}</p>
-              {aiFeedback ? <p className="mt-1 text-xs text-cyan-200">AI: {aiFeedback}</p> : null}
-            </div>
-          ) : null}
+          {result ? <div className="rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-4"><p className="font-bold">{result.score}%</p><p>{result.feedback}</p></div> : null}
         </section>
       </div>
     </main>

@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Blabla AI Command Simulator
 
-## Getting Started
+## 1) Cài đặt
 
-First, run the development server:
+```bash
+npm install
+```
+
+## 2) Cấu hình AI (Gemini)
+
+Tạo file `.env.local`:
+
+```bash
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+```
+
+> Bạn có thể thay `YOUR_GEMINI_API_KEY` bằng key bạn đang dùng.
+
+## 3) Chạy local
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Mở: `http://localhost:3000`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 4) Chạy chế độ online trong mạng LAN (máy khác truy cập được)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev -- --hostname 0.0.0.0 --port 3000
+```
 
-## Learn More
+Sau đó dùng IP máy host (ví dụ `http://192.168.1.20:3000`) để truy cập từ máy khác.
 
-To learn more about Next.js, take a look at the following resources:
+## 5) Tài khoản mặc định
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Admin: `admin@blabla.ai`
+- Password: `123456`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 6) Kiến trúc dữ liệu online
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Dữ liệu được lưu trong `data/db.json` trên server.
+- Bao gồm: `users`, `sessions`, `histories`, `posts`.
+- Lịch sử đã tách theo `userId`, mỗi user chỉ xem lịch sử của mình.
+- Tab Community cho phép các user tương tác bằng post chung.
