@@ -15,6 +15,11 @@ export async function GET(request: NextRequest) {
       email: user.email,
       role: user.role,
       isAdmin: user.isAdmin,
+      createdAt: user.createdAt,
+      loginCount: user.loginCount,
+      totalLoginDays: user.totalLoginDays,
+      loginStreak: user.loginStreak,
+      lastLoginDate: user.lastLoginDate,
     },
   });
 }

@@ -29,6 +29,10 @@ export async function POST(request: NextRequest) {
     role: "admin",
     isAdmin: true,
     createdAt: new Date().toISOString(),
+    loginCount: 0,
+    totalLoginDays: 0,
+    loginStreak: 0,
+    lastLoginDate: null,
   });
   await writeDB(db);
   return NextResponse.json({ ok: true });

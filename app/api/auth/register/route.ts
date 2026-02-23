@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Email đã tồn tại." }, { status: 409 });
   }
 
+  const now = new Date().toISOString();
   const user = {
     id: newId("user"),
     name,
@@ -30,12 +31,16 @@ export async function POST(request: NextRequest) {
     password,
     role: role ?? "office",
     isAdmin: false,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    loginCount: 1,
+    totalLoginDays: 1,
+    loginStreak: 1,
+    lastLoginDate: now,
   };
   db.users.push(user);
 
   const token = createSessionToken(user.id);
-  db.sessions.push({ token, userId: user.id, createdAt: new Date().toISOString() });
+  db.sessions.push({ token, userId: user.id, createdAt: now });
   await writeDB(db);
 
   return NextResponse.json({
@@ -46,6 +51,10 @@ export async function POST(request: NextRequest) {
       email: user.email,
       role: user.role,
       isAdmin: user.isAdmin,
+      loginCount: user.loginCount,
+      totalLoginDays: user.totalLoginDays,
+      loginStreak: user.loginStreak,
+      lastLoginDate: user.lastLoginDate,
     },
   });
 }

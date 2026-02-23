@@ -7,7 +7,11 @@
       "password": "123456",
       "role": "admin",
       "isAdmin": true,
-      "createdAt": "1970-01-01T00:00:00.000Z"
+      "createdAt": "1970-01-01T00:00:00.000Z",
+      "loginCount": 0,
+      "totalLoginDays": 0,
+      "loginStreak": 0,
+      "lastLoginDate": null
     }
   ],
   "sessions": [],

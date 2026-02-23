@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSessionToken, readDB, writeDB } from "@/app/lib/server-db";
+import { createSessionToken, isConsecutiveLogin, readDB, writeDB } from "@/app/lib/server-db";
 
 export async function POST(request: NextRequest) {
   const { email, password } = (await request.json()) as { email?: string; password?: string };
@@ -14,8 +14,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Thông tin đăng nhập không đúng." }, { status: 401 });
   }
 
+  const now = new Date().toISOString();
+  const loginCheck = isConsecutiveLogin(user.lastLoginDate, now);
+
+  if (!loginCheck.sameDay) {
+    user.totalLoginDays += 1;
+    user.loginCount += 1;
+
+    if (user.lastLoginDate === null) {
+      user.loginStreak = 1;
+    } else if (loginCheck.consecutive) {
+      user.loginStreak += 1;
+    } else {
+      user.loginStreak = 1;
+    }
+
+    user.lastLoginDate = now;
+  }
+
   const token = createSessionToken(user.id);
-  db.sessions.push({ token, userId: user.id, createdAt: new Date().toISOString() });
+  db.sessions.push({ token, userId: user.id, createdAt: now });
   await writeDB(db);
 
   return NextResponse.json({
@@ -26,6 +44,10 @@ export async function POST(request: NextRequest) {
       email: user.email,
       role: user.role,
       isAdmin: user.isAdmin,
+      loginCount: user.loginCount,
+      totalLoginDays: user.totalLoginDays,
+      loginStreak: user.loginStreak,
+      lastLoginDate: user.lastLoginDate,
     },
   });
 }
