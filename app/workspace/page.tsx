@@ -18,7 +18,7 @@ type User = {
   stats?: { historyCount: number; postCount: number; lastSessionAt: string | null };
 };
 
-type HistoryItem = { id: string; title: string; score: number; feedback: string; createdAt: string };
+type HistoryItem = { id: string; type?: "master" | "arena" | "auditor"; title: string; score: number; feedback: string; createdAt: string };
 type Post = { id: string; userName: string; content: string; createdAt: string };
 type Tab = "dashboard" | "promptmaster" | "arena" | "auditor" | "history" | "community" | "admin";
 type PromptMasterLesson = {
@@ -68,11 +68,9 @@ export default function WorkspacePage() {
 
   const [selectedLessonId, setSelectedLessonId] = useState<string>("");
   const [masterPrompt, setMasterPrompt] = useState("");
-  const [masterOutput, setMasterOutput] = useState("");
   const [masterResult, setMasterResult] = useState<string>("");
 
   const [arenaPrompt, setArenaPrompt] = useState("");
-  const [arenaOutput, setArenaOutput] = useState("");
   const [arenaResult, setArenaResult] = useState<string>("");
   const [leaderboard, setLeaderboard] = useState<
     Array<{ id: string; userName: string; accuracy: number; tokens: number; efficiency: number }>
@@ -201,10 +199,29 @@ export default function WorkspacePage() {
   const completedCourses = new Set(
     histories.filter((item) => item.title.startsWith("Khoá Prompt Master")).map((item) => item.title),
   ).size;
+  const arenaAttempts = histories.filter((item) => item.type === "arena").length;
+  const auditorAttempts = histories.filter((item) => item.type === "auditor").length;
+  const communityPosts = posts.length;
+  const topArena = leaderboard[0];
+  const myArenaRank = me ? leaderboard.findIndex((entry) => entry.userName === me.name) + 1 : 0;
 
   const submitPromptMaster = async () => {
     if (!selectedLesson) return;
     setLoading(true);
+
+    const aiRunPrompt = `Nhiệm vụ thực hành: ${selectedLesson.practiceChallenge}
+
+Hãy trả lời theo đúng yêu cầu bài tập bằng cách thực thi prompt học viên dưới đây:
+${masterPrompt}`;
+    const aiRunRes = await fetch("/api/ai", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ context: "Prompt Master Practice", mode: "generate", prompt: aiRunPrompt }),
+    });
+    const aiRunData = (await aiRunRes.json()) as { output?: string; error?: string };
+    const generatedOutput = aiRunRes.ok
+      ? aiRunData.output ?? "AI chưa tạo được output."
+      : aiRunData.error ?? "AI không tạo được output.";
 
     const reviewerPrompt = `Bạn là reviewer chỉ tập trung vào chất lượng prompt, KHÔNG biết nội dung đề bài cụ thể.
 Hãy đánh giá prompt sau theo tiêu chí rõ vai trò, rõ output, ràng buộc và khả năng lặp cải tiến.
@@ -226,16 +243,19 @@ ${masterPrompt}`;
 Thông tin bài học:
 - Thực trạng: ${selectedLesson.situation}
 - Tóm tắt: ${selectedLesson.overview}
-- Phương pháp: ${selectedLesson.methodGuide}
+- Phương pháp viết prompt tốt: ${selectedLesson.methodGuide}
 - Yêu cầu thực hành: ${selectedLesson.practiceChallenge}
 
 Prompt của học viên:
 ${masterPrompt}
 
+Output AI tạo ra từ prompt:
+${generatedOutput}
+
 Phản hồi của reviewer (chỉ biết prompt):
 ${reviewerFeedback}
 
-Nhiệm vụ: tự kiểm tra phản hồi reviewer đã bám yêu cầu chưa, rồi chấm điểm cuối cùng và góp ý. Trả về JSON {"score": number, "feedback": string}.`;
+Nhiệm vụ: tự kiểm tra output AI và phản hồi reviewer đã bám yêu cầu chưa, rồi chấm điểm cuối cùng và góp ý cải thiện prompt. Trả về JSON {"score": number, "feedback": string}.`;
 
     const finalRes = await fetch("/api/ai", {
       method: "POST",
@@ -256,23 +276,58 @@ Nhiệm vụ: tự kiểm tra phản hồi reviewer đã bám yêu cầu chưa, 
         type: "master",
         title: `Khoá Prompt Master: ${selectedLesson.title}`,
         score,
-        feedback: `Reviewer: ${reviewerFeedback} | Tổng kết: ${finalFeedback}`,
+        feedback: `AI Output: ${generatedOutput} | Reviewer: ${reviewerFeedback} | Tổng kết: ${finalFeedback}`,
       }),
     });
 
     await loadHistories();
-    setMasterResult(`Reviewer: ${reviewerFeedback}
+    setMasterResult(`AI tạo output: ${generatedOutput}
+
+Reviewer: ${reviewerFeedback}
 
 Điểm cuối: ${score}% | Tổng kết: ${finalFeedback}`);
     setLoading(false);
   };
 
   const submitArena = async () => {
+    if (!config) return;
     setLoading(true);
+
+    const solvePrompt = `Bài toán Arena: ${config.arenaWeekly.title}
+Input chuẩn: ${config.arenaWeekly.inputText}
+Hãy thực thi prompt sau của học viên và tạo output cuối:
+${arenaPrompt}`;
+    const solveRes = await fetch("/api/ai", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ context: "Arena Solver", mode: "generate", prompt: solvePrompt }),
+    });
+    const solveData = (await solveRes.json()) as { output?: string; error?: string };
+    const generatedOutput = solveRes.ok ? solveData.output ?? "" : "";
+
+    if (!generatedOutput) {
+      setArenaResult(solveData.error ?? "AI không tạo được output cho Arena.");
+      setLoading(false);
+      return;
+    }
+
+    const selfJudgePrompt = `Golden response: ${config.arenaWeekly.goldenResponse}
+Output AI tạo ra: ${generatedOutput}
+Hãy tự đánh giá output có khớp yêu cầu chưa, nêu đúng/sai ngắn gọn.`;
+    const selfJudgeRes = await fetch("/api/ai", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ context: "Arena Self Judge", prompt: selfJudgePrompt }),
+    });
+    const selfJudgeData = (await selfJudgeRes.json()) as { feedback?: string; error?: string };
+    const selfJudgeFeedback = selfJudgeRes.ok
+      ? selfJudgeData.feedback ?? "Chưa có tự đánh giá."
+      : selfJudgeData.error ?? "Tự đánh giá thất bại.";
+
     const res = await fetch("/api/arena/submit", {
       method: "POST",
       headers: authHeaders,
-      body: JSON.stringify({ prompt: arenaPrompt, output: arenaOutput }),
+      body: JSON.stringify({ prompt: arenaPrompt, output: generatedOutput }),
     });
     const data = (await res.json()) as { accuracy?: number; tokens?: number; efficiency?: number; error?: string };
 
@@ -283,7 +338,11 @@ Nhiệm vụ: tự kiểm tra phản hồi reviewer đã bám yêu cầu chưa, 
     }
 
     setArenaResult(
-      `Accuracy: ${data.accuracy}% | Tokens: ${data.tokens} | Efficiency: ${data.efficiency}`,
+      `AI output: ${generatedOutput}
+
+Tự đánh giá: ${selfJudgeFeedback}
+
+Accuracy: ${data.accuracy}% | Tokens: ${data.tokens} | Efficiency: ${data.efficiency}`,
     );
     await loadLeaderboard();
     await loadHistories();
@@ -305,11 +364,27 @@ Nhiệm vụ: tự kiểm tra phản hồi reviewer đã bám yêu cầu chưa, 
     if (!scenario) return;
     setLoading(true);
 
-    const judgePrompt = `
-Danh sách lỗi đúng cần tìm: ${scenario.requiredIssues.join(", ")}
+    const correctedAnswerPrompt = `Bạn đang sửa câu trả lời AI bị sai.
+Câu sai ban đầu:
+${scenario.wrongAnswer}
+
+Hãy thực thi prompt sửa của học viên để tạo ra câu trả lời đúng hơn:
+${auditorRePrompt}`;
+    const correctionRes = await fetch("/api/ai", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ context: "AI Auditor Correction", mode: "generate", prompt: correctedAnswerPrompt }),
+    });
+    const correctionData = (await correctionRes.json()) as { output?: string; error?: string };
+    const correctedAnswer = correctionRes.ok
+      ? correctionData.output ?? ""
+      : correctionData.error ?? "AI không tạo được câu trả lời sửa.";
+
+    const judgePrompt = `Danh sách lỗi đúng cần tìm: ${scenario.requiredIssues.join(", ")}
 Người dùng phát hiện lỗi: ${auditorIssues}
 Prompt sửa của người dùng: ${auditorRePrompt}
-Hãy chấm theo rubric AI Auditor.`;
+Câu trả lời mới do AI tạo từ prompt sửa: ${correctedAnswer}
+Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới đã đúng chưa.`;
 
     const res = await fetch("/api/ai", {
       method: "POST",
@@ -328,12 +403,14 @@ Hãy chấm theo rubric AI Auditor.`;
         type: "auditor",
         title: `AI Auditor: ${scenario.title}`,
         score,
-        feedback,
+        feedback: `Câu trả lời mới: ${correctedAnswer} | Đánh giá: ${feedback}`,
       }),
     });
 
     await loadHistories();
-    setAuditorResult(`Điểm: ${score}% | Nhận xét: ${feedback}`);
+    setAuditorResult(`AI trả lời sau khi sửa: ${correctedAnswer}
+
+Điểm: ${score}% | Nhận xét: ${feedback}`);
     setLoading(false);
   };
 
@@ -455,17 +532,31 @@ Hãy chấm theo rubric AI Auditor.`;
         </aside>
 
         <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-900/50 p-4 scrollbar-pro max-h-[84vh] overflow-y-auto">
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Điểm trung bình</p><p className="text-2xl font-bold">{avgScore}%</p></div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Số ngày đăng nhập</p><p className="text-2xl font-bold">{me?.totalLoginDays ?? 0}</p></div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Chuỗi hiện tại</p><p className="text-2xl font-bold text-emerald-300">{me?.loginStreak ?? 0} ngày</p></div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Khoá PromptMaster đã xong</p><p className="text-2xl font-bold text-cyan-300">{completedCourses}</p></div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Lượt Arena / Auditor</p><p className="text-xl font-bold text-violet-300">{arenaAttempts} / {auditorAttempts}</p></div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Bài cộng đồng</p><p className="text-2xl font-bold text-amber-300">{communityPosts}</p></div>
           </div>
 
           {activeTab === "dashboard" && (
             <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
               <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
+                  <p className="font-semibold text-cyan-200">Hiệu suất Arena</p>
+                  <p className="mt-1">Top hiện tại: {topArena ? `${topArena.userName} (${topArena.efficiency})` : "Chưa có dữ liệu"}</p>
+                  <p className="mt-1">Xếp hạng của bạn: {myArenaRank > 0 ? `#${myArenaRank}` : "Chưa có"}</p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
+                  <p className="font-semibold text-cyan-200">Hoạt động gần đây</p>
+                  <p className="mt-1">Tổng lượt nộp bài: {histories.length}</p>
+                  <p className="mt-1">Bài mới nhất: {histories[0] ? `${histories[0].title} (${histories[0].score}%)` : "Chưa có"}</p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -489,12 +580,12 @@ Hãy chấm theo rubric AI Auditor.`;
                   <p className="text-sm text-slate-300">{selectedLesson.overview}</p>
                   <p className="mt-3 text-sm font-semibold text-cyan-200">Bước 3 - Phương pháp và cách dạy</p>
                   <p className="text-sm text-slate-300">{selectedLesson.methodGuide}</p>
+                  <p className="mt-1 text-xs text-slate-400">(Mục này tập trung cách viết prompt AI để tạo prompt chất lượng)</p>
                   <p className="mt-3 text-sm font-semibold text-cyan-200">Bước 4 - Thực hành</p>
                   <p className="text-sm text-slate-200">Đề bài: {selectedLesson.practiceChallenge}</p>
                   <p className="mt-2 text-xs text-slate-300">Prompt tham khảo: {selectedLesson.samplePrompt}</p>
                   <textarea value={masterPrompt} onChange={(e)=>setMasterPrompt(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Viết prompt của bạn..."/>
-                  <textarea value={masterOutput} onChange={(e)=>setMasterOutput(e.target.value)} className="mt-2 h-20 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="(Tuỳ chọn) Dán output AI tạo ra..."/>
-                  <button onClick={submitPromptMaster} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">{loading?"AI đang chấm...":"Chấm Prompt Master"}</button>
+                                    <button onClick={submitPromptMaster} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">{loading?"AI đang chấm...":"Chấm Prompt Master"}</button>
                   {masterResult ? <p className="mt-2 whitespace-pre-line text-sm text-slate-200">{masterResult}</p> : null}
                 </div>
               )}
@@ -507,9 +598,8 @@ Hãy chấm theo rubric AI Auditor.`;
               <p className="mt-2 text-sm text-slate-300">{config.arenaWeekly.weekLabel}: {config.arenaWeekly.title}</p>
               <p className="mt-2 rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">Input: {config.arenaWeekly.inputText}</p>
               <textarea value={arenaPrompt} onChange={(e)=>setArenaPrompt(e.target.value)} className="mt-3 h-20 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Prompt của bạn"/>
-              <textarea value={arenaOutput} onChange={(e)=>setArenaOutput(e.target.value)} className="mt-2 h-20 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Output AI của bạn"/>
-              <button onClick={submitArena} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">Nộp Arena</button>
-              {arenaResult ? <p className="mt-2 text-sm">{arenaResult}</p> : null}
+                            <button onClick={submitArena} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">Nộp Arena</button>
+              {arenaResult ? <p className="mt-2 whitespace-pre-line text-sm">{arenaResult}</p> : null}
 
               <h3 className="mt-5 text-lg font-semibold text-cyan-200">Leaderboard Accuracy / Tokens</h3>
               <div className="mt-2 space-y-2">
@@ -534,7 +624,7 @@ Hãy chấm theo rubric AI Auditor.`;
               <textarea value={auditorIssues} onChange={(e)=>setAuditorIssues(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Nêu các lỗi bạn phát hiện..."/>
               <textarea value={auditorRePrompt} onChange={(e)=>setAuditorRePrompt(e.target.value)} className="mt-2 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Prompt sửa lại để AI trả lời đúng..."/>
               <button onClick={submitAuditor} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">Chấm điểm Auditor</button>
-              {auditorResult ? <p className="mt-2 text-sm">{auditorResult}</p> : null}
+              {auditorResult ? <p className="mt-2 whitespace-pre-line text-sm">{auditorResult}</p> : null}
             </div>
           )}
 
