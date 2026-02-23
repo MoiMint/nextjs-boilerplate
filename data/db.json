@@ -1,0 +1,87 @@
+{
+  "users": [
+    {
+      "id": "admin-seed",
+      "name": "Admin Blabla",
+      "email": "admin@blabla.ai",
+      "password": "123456",
+      "role": "admin",
+      "isAdmin": true,
+      "createdAt": "1970-01-01T00:00:00.000Z",
+      "loginCount": 0,
+      "totalLoginDays": 0,
+      "loginStreak": 0,
+      "lastLoginDate": null
+    }
+  ],
+  "sessions": [],
+  "histories": [],
+  "posts": [],
+  "arenaSubmissions": [],
+  "config": {
+    "promptMasterLessons": [
+      {
+        "id": "pm-1",
+        "title": "Dashboard quản lý chi tiêu học sinh",
+        "topic": "Ứng dụng số với ChatGPT + Claude",
+        "situation": "Nhiều bạn tiêu tiền tiêu vặt rất nhanh nhưng không biết đang chi vào đâu nên cuối tháng thường thiếu hụt.",
+        "overview": "Bạn sẽ học cách biến vấn đề thực tế thành app dashboard theo dõi chi tiêu trực quan để kiểm soát tài chính cá nhân.",
+        "methodGuide": "Áp dụng RTRI: (1) Role - giao vai trò rõ cho AI, (2) Task - nêu nhiệm vụ cụ thể, (3) Requirement - ràng buộc kỹ thuật và giao diện, (4) Iterate - thử nghiệm rồi tinh chỉnh. Quy trình: lên ý tưởng bằng ChatGPT, chuyển sang Claude Artifacts để sinh app, test dữ liệu và cải tiến.",
+        "practiceChallenge": "Viết prompt để AI tạo dashboard quản lý chi tiêu có danh mục ăn uống/đi lại/học tập/giải trí/khác, hỗ trợ thêm-xóa khoản chi và hiển thị biểu đồ tổng quan.",
+        "samplePrompt": "Bạn là Senior Product Designer + Frontend Mentor. Hãy tạo web app quản lý chi tiêu học sinh bằng HTML/CSS/JS, có form nhập khoản chi, danh mục, nút xoá, tổng theo danh mục và biểu đồ cột. Output gồm: mô tả kiến trúc, mã hoàn chỉnh, checklist test nhanh."
+      },
+      {
+        "id": "pm-2",
+        "title": "Email xử lý khủng hoảng truyền thông",
+        "topic": "Truyền thông",
+        "situation": "Khách hàng phàn nàn đơn hàng trễ 5 ngày và đang rất bức xúc trên mạng xã hội.",
+        "overview": "Mục tiêu của bài là tạo prompt giúp AI viết email xin lỗi chuyên nghiệp và kế hoạch xử lý rõ ràng, giữ được niềm tin khách hàng.",
+        "methodGuide": "Xác định rõ giọng điệu thương hiệu, đối tượng người nhận, cấu trúc email 4 phần (xin lỗi - nguyên nhân - hành động - cam kết), thêm ràng buộc độ dài và định dạng bullet.",
+        "practiceChallenge": "Viết prompt yêu cầu AI soạn email xin lỗi + 3 hành động khắc phục + ưu đãi đền bù, ngắn gọn dưới 220 từ.",
+        "samplePrompt": "Vai trò: Chuyên viên CSKH cao cấp. Nhiệm vụ: viết email xin lỗi chuyên nghiệp cho khách hàng bị giao trễ 5 ngày. Yêu cầu: giọng điệu đồng cảm, nêu 3 hành động khắc phục, kết thúc bằng ưu đãi 15%, tối đa 220 từ."
+      }
+    ],
+    "arenaWeekly": {
+      "weekLabel": "Tuần 1",
+      "title": "Trích xuất số điện thoại",
+      "inputText": "Liên hệ: 0901234567, 0911222333, hotline 02873009999.",
+      "goldenResponse": "[\"0901234567\",\"0911222333\",\"02873009999\"]"
+    },
+    "auditorScenario": {
+      "title": "Bắt lỗi ảo giác trong báo cáo AI",
+      "wrongAnswer": "Việt Nam có 70 tỉnh thành, thủ đô đặt tại TP.HCM, và đồng tiền chính là Dollar Việt Nam.",
+      "requiredIssues": [
+        "Việt Nam có 63 tỉnh thành",
+        "Thủ đô là Hà Nội",
+        "Đồng tiền là Việt Nam Đồng (VND)"
+      ]
+    },
+    "auditorScenarios": [
+      {
+        "title": "Bắt lỗi ảo giác trong báo cáo AI",
+        "wrongAnswer": "Việt Nam có 70 tỉnh thành, thủ đô đặt tại TP.HCM, và đồng tiền chính là Dollar Việt Nam.",
+        "requiredIssues": [
+          "Việt Nam có 63 tỉnh thành",
+          "Thủ đô là Hà Nội",
+          "Đồng tiền là Việt Nam Đồng (VND)"
+        ]
+      },
+      {
+        "title": "Bắt lỗi số liệu marketing",
+        "wrongAnswer": "Tỷ lệ chuyển đổi chiến dịch A là 72% dù chỉ có 45 đơn trên 1000 lượt truy cập; CPC là 2 đồng mỗi click.",
+        "requiredIssues": [
+          "Tỷ lệ chuyển đổi đúng là 4.5%",
+          "Số liệu CPC 2 đồng/click không thực tế, cần kiểm tra đơn vị ngân sách"
+        ]
+      },
+      {
+        "title": "Bắt lỗi tư vấn sức khoẻ thiếu an toàn",
+        "wrongAnswer": "Bạn có thể tự ý ngừng thuốc huyết áp nếu hôm nay cảm thấy khỏe hơn và thay bằng nước ép cần tây.",
+        "requiredIssues": [
+          "Không được tự ý ngừng thuốc kê đơn",
+          "Cần khuyến nghị tham vấn bác sĩ trước khi thay đổi phác đồ"
+        ]
+      }
+    ]
+  }
+}
