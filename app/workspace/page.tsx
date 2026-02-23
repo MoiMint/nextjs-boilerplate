@@ -25,8 +25,11 @@ type PromptMasterLesson = {
   id: string;
   title: string;
   topic: string;
-  brief: string;
-  sample: string;
+  situation: string;
+  overview: string;
+  methodGuide: string;
+  practiceChallenge: string;
+  samplePrompt: string;
 };
 
 type ArenaWeekly = {
@@ -46,6 +49,7 @@ type AppConfig = {
   promptMasterLessons: PromptMasterLesson[];
   arenaWeekly: ArenaWeekly;
   auditorScenario: AuditorScenario;
+  auditorScenarios?: AuditorScenario[];
 };
 
 const SESSION_TOKEN_KEY = "blabla-session-token";
@@ -77,6 +81,7 @@ export default function WorkspacePage() {
   const [auditorIssues, setAuditorIssues] = useState("");
   const [auditorRePrompt, setAuditorRePrompt] = useState("");
   const [auditorResult, setAuditorResult] = useState("");
+  const [activeAuditorScenario, setActiveAuditorScenario] = useState<AuditorScenario | null>(null);
 
   const [communityInput, setCommunityInput] = useState("");
 
@@ -87,8 +92,11 @@ export default function WorkspacePage() {
 
   const [newLessonTitle, setNewLessonTitle] = useState("");
   const [newLessonTopic, setNewLessonTopic] = useState("");
-  const [newLessonBrief, setNewLessonBrief] = useState("");
-  const [newLessonSample, setNewLessonSample] = useState("");
+  const [newLessonSituation, setNewLessonSituation] = useState("");
+  const [newLessonOverview, setNewLessonOverview] = useState("");
+  const [newLessonMethodGuide, setNewLessonMethodGuide] = useState("");
+  const [newLessonPracticeChallenge, setNewLessonPracticeChallenge] = useState("");
+  const [newLessonSamplePrompt, setNewLessonSamplePrompt] = useState("");
 
   const [newArenaWeek, setNewArenaWeek] = useState("");
   const [newArenaTitle, setNewArenaTitle] = useState("");
@@ -144,7 +152,10 @@ export default function WorkspacePage() {
     if (!selectedLessonId && data.config.promptMasterLessons.length) {
       setSelectedLessonId(data.config.promptMasterLessons[0].id);
     }
-  }, [selectedLessonId]);
+    if (!activeAuditorScenario) {
+      setActiveAuditorScenario(data.config.auditorScenarios?.[0] ?? data.config.auditorScenario ?? null);
+    }
+  }, [activeAuditorScenario, selectedLessonId]);
 
   const loadLeaderboard = useCallback(async () => {
     const res = await fetch("/api/arena/leaderboard");
@@ -195,17 +206,48 @@ export default function WorkspacePage() {
     if (!selectedLesson) return;
     setLoading(true);
 
-    const judgePrompt = `\nYêu cầu nhiệm vụ: ${selectedLesson.brief}\nMẫu tham khảo: ${selectedLesson.sample}\nBài làm của người dùng:\nPrompt: ${masterPrompt}\nOutput: ${masterOutput}\n\nChấm điểm theo tiêu chí Prompt Master.`;
+    const reviewerPrompt = `Bạn là reviewer chỉ tập trung vào chất lượng prompt, KHÔNG biết nội dung đề bài cụ thể.
+Hãy đánh giá prompt sau theo tiêu chí rõ vai trò, rõ output, ràng buộc và khả năng lặp cải tiến.
+Trả về JSON {"score": number, "feedback": string}.
+Prompt học viên:
+${masterPrompt}`;
 
-    const res = await fetch("/api/ai", {
+    const reviewerRes = await fetch("/api/ai", {
       method: "POST",
       headers: authHeaders,
-      body: JSON.stringify({ context: "Prompt Master Judge", prompt: judgePrompt }),
+      body: JSON.stringify({ context: "Prompt Master Reviewer", prompt: reviewerPrompt }),
+    });
+    const reviewerData = (await reviewerRes.json()) as { score?: number; feedback?: string; error?: string };
+    const reviewerFeedback = reviewerRes.ok
+      ? reviewerData.feedback ?? "Reviewer chưa có phản hồi."
+      : reviewerData.error ?? "Reviewer gặp lỗi.";
+
+    const auditorPrompt = `Bạn là AI tổng kết biết đầy đủ bối cảnh bài học.
+Thông tin bài học:
+- Thực trạng: ${selectedLesson.situation}
+- Tóm tắt: ${selectedLesson.overview}
+- Phương pháp: ${selectedLesson.methodGuide}
+- Yêu cầu thực hành: ${selectedLesson.practiceChallenge}
+
+Prompt của học viên:
+${masterPrompt}
+
+Phản hồi của reviewer (chỉ biết prompt):
+${reviewerFeedback}
+
+Nhiệm vụ: tự kiểm tra phản hồi reviewer đã bám yêu cầu chưa, rồi chấm điểm cuối cùng và góp ý. Trả về JSON {"score": number, "feedback": string}.`;
+
+    const finalRes = await fetch("/api/ai", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ context: "Prompt Master Final Auditor", prompt: auditorPrompt }),
     });
 
-    const data = (await res.json()) as { score?: number; feedback?: string; error?: string };
-    const score = res.ok ? data.score ?? 70 : 60;
-    const feedback = res.ok ? data.feedback ?? "Không có nhận xét." : data.error ?? "AI lỗi.";
+    const finalData = (await finalRes.json()) as { score?: number; feedback?: string; error?: string };
+    const score = finalRes.ok ? finalData.score ?? 72 : 60;
+    const finalFeedback = finalRes.ok
+      ? finalData.feedback ?? "Không có nhận xét cuối."
+      : finalData.error ?? "AI tổng kết lỗi.";
 
     await fetch("/api/history", {
       method: "POST",
@@ -214,12 +256,14 @@ export default function WorkspacePage() {
         type: "master",
         title: `Khoá Prompt Master: ${selectedLesson.title}`,
         score,
-        feedback,
+        feedback: `Reviewer: ${reviewerFeedback} | Tổng kết: ${finalFeedback}`,
       }),
     });
 
     await loadHistories();
-    setMasterResult(`Điểm: ${score}% | Nhận xét: ${feedback}`);
+    setMasterResult(`Reviewer: ${reviewerFeedback}
+
+Điểm cuối: ${score}% | Tổng kết: ${finalFeedback}`);
     setLoading(false);
   };
 
@@ -246,11 +290,26 @@ export default function WorkspacePage() {
     setLoading(false);
   };
 
-  const submitAuditor = async () => {
+  const randomizeAuditorScenario = () => {
     if (!config) return;
+    const pool = config.auditorScenarios?.length ? config.auditorScenarios : [config.auditorScenario];
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    setActiveAuditorScenario(pick);
+    setAuditorIssues("");
+    setAuditorRePrompt("");
+    setAuditorResult("");
+  };
+
+  const submitAuditor = async () => {
+    const scenario = activeAuditorScenario ?? config?.auditorScenario;
+    if (!scenario) return;
     setLoading(true);
 
-    const judgePrompt = `\nDanh sách lỗi đúng cần tìm: ${config.auditorScenario.requiredIssues.join(", ")}\nNgười dùng phát hiện lỗi: ${auditorIssues}\nPrompt sửa của người dùng: ${auditorRePrompt}\nHãy chấm theo rubric AI Auditor.`;
+    const judgePrompt = `
+Danh sách lỗi đúng cần tìm: ${scenario.requiredIssues.join(", ")}
+Người dùng phát hiện lỗi: ${auditorIssues}
+Prompt sửa của người dùng: ${auditorRePrompt}
+Hãy chấm theo rubric AI Auditor.`;
 
     const res = await fetch("/api/ai", {
       method: "POST",
@@ -267,7 +326,7 @@ export default function WorkspacePage() {
       headers: authHeaders,
       body: JSON.stringify({
         type: "auditor",
-        title: `AI Auditor: ${config.auditorScenario.title}`,
+        title: `AI Auditor: ${scenario.title}`,
         score,
         feedback,
       }),
@@ -313,8 +372,11 @@ export default function WorkspacePage() {
         promptLesson: {
           title: newLessonTitle,
           topic: newLessonTopic,
-          brief: newLessonBrief,
-          sample: newLessonSample,
+          situation: newLessonSituation,
+          overview: newLessonOverview,
+          methodGuide: newLessonMethodGuide,
+          practiceChallenge: newLessonPracticeChallenge,
+          samplePrompt: newLessonSamplePrompt,
         },
       }),
     });
@@ -325,8 +387,11 @@ export default function WorkspacePage() {
     setAdminMsg("Đã thêm khóa Prompt Master.");
     setNewLessonTitle("");
     setNewLessonTopic("");
-    setNewLessonBrief("");
-    setNewLessonSample("");
+    setNewLessonSituation("");
+    setNewLessonOverview("");
+    setNewLessonMethodGuide("");
+    setNewLessonPracticeChallenge("");
+    setNewLessonSamplePrompt("");
     loadConfig();
   };
 
@@ -418,12 +483,19 @@ export default function WorkspacePage() {
 
               {selectedLesson && (
                 <div className="mt-4 rounded-lg border border-white/10 bg-slate-800/70 p-4">
-                  <p className="text-sm text-cyan-200">Đề bài: {selectedLesson.brief}</p>
-                  <p className="mt-2 text-xs text-slate-300">Mẫu gợi ý: {selectedLesson.sample}</p>
+                  <p className="text-sm font-semibold text-cyan-200">Bước 1 - Thực trạng</p>
+                  <p className="text-sm text-slate-200">{selectedLesson.situation}</p>
+                  <p className="mt-3 text-sm font-semibold text-cyan-200">Bước 2 - Thông tin sơ qua</p>
+                  <p className="text-sm text-slate-300">{selectedLesson.overview}</p>
+                  <p className="mt-3 text-sm font-semibold text-cyan-200">Bước 3 - Phương pháp và cách dạy</p>
+                  <p className="text-sm text-slate-300">{selectedLesson.methodGuide}</p>
+                  <p className="mt-3 text-sm font-semibold text-cyan-200">Bước 4 - Thực hành</p>
+                  <p className="text-sm text-slate-200">Đề bài: {selectedLesson.practiceChallenge}</p>
+                  <p className="mt-2 text-xs text-slate-300">Prompt tham khảo: {selectedLesson.samplePrompt}</p>
                   <textarea value={masterPrompt} onChange={(e)=>setMasterPrompt(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Viết prompt của bạn..."/>
-                  <textarea value={masterOutput} onChange={(e)=>setMasterOutput(e.target.value)} className="mt-2 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Dán output AI tạo ra..."/>
-                  <button onClick={submitPromptMaster} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">{loading?"AI đang chấm...":"Chấm điểm bằng AI thật"}</button>
-                  {masterResult ? <p className="mt-2 text-sm text-slate-200">{masterResult}</p> : null}
+                  <textarea value={masterOutput} onChange={(e)=>setMasterOutput(e.target.value)} className="mt-2 h-20 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="(Tuỳ chọn) Dán output AI tạo ra..."/>
+                  <button onClick={submitPromptMaster} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">{loading?"AI đang chấm...":"Chấm Prompt Master"}</button>
+                  {masterResult ? <p className="mt-2 whitespace-pre-line text-sm text-slate-200">{masterResult}</p> : null}
                 </div>
               )}
             </div>
@@ -452,8 +524,12 @@ export default function WorkspacePage() {
 
           {activeTab === "auditor" && config && (
             <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
-              <h2 className="text-xl font-semibold text-cyan-200">AI Auditor</h2>
-              <p className="mt-2 text-sm text-slate-300">Câu trả lời AI sai: {config.auditorScenario.wrongAnswer}</p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-xl font-semibold text-cyan-200">AI Auditor</h2>
+                <button onClick={randomizeAuditorScenario} className="rounded-lg border border-cyan-300/50 px-3 py-2 text-sm text-cyan-200">Làm mới đề ngẫu nhiên</button>
+              </div>
+              <p className="mt-2 text-sm text-cyan-100">Đề hiện tại: {(activeAuditorScenario ?? config.auditorScenario).title}</p>
+              <p className="mt-2 text-sm text-slate-300">Câu trả lời AI sai: {(activeAuditorScenario ?? config.auditorScenario).wrongAnswer}</p>
               <p className="mt-1 text-xs text-slate-400">Nhiệm vụ: nêu lỗi và viết prompt sửa để AI ra đúng.</p>
               <textarea value={auditorIssues} onChange={(e)=>setAuditorIssues(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Nêu các lỗi bạn phát hiện..."/>
               <textarea value={auditorRePrompt} onChange={(e)=>setAuditorRePrompt(e.target.value)} className="mt-2 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Prompt sửa lại để AI trả lời đúng..."/>
@@ -509,8 +585,11 @@ export default function WorkspacePage() {
               <div className="mt-2 grid gap-2 md:grid-cols-2">
                 <input value={newLessonTitle} onChange={(e)=>setNewLessonTitle(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên khóa"/>
                 <input value={newLessonTopic} onChange={(e)=>setNewLessonTopic(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Chủ đề"/>
-                <input value={newLessonBrief} onChange={(e)=>setNewLessonBrief(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Đề bài"/>
-                <input value={newLessonSample} onChange={(e)=>setNewLessonSample(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Mẫu prompt"/>
+                <input value={newLessonSituation} onChange={(e)=>setNewLessonSituation(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Thực trạng"/>
+                <input value={newLessonOverview} onChange={(e)=>setNewLessonOverview(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Thông tin sơ qua"/>
+                <input value={newLessonMethodGuide} onChange={(e)=>setNewLessonMethodGuide(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Phương pháp và cách dạy"/>
+                <input value={newLessonPracticeChallenge} onChange={(e)=>setNewLessonPracticeChallenge(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Đề bài thực hành"/>
+                <input value={newLessonSamplePrompt} onChange={(e)=>setNewLessonSamplePrompt(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Prompt mẫu"/>
               </div>
               <button onClick={addPromptLesson} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm khóa Prompt Master</button>
 

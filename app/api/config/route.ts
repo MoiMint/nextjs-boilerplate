@@ -12,7 +12,15 @@ export async function PATCH(request: NextRequest) {
   if (!me || !me.isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = (await request.json()) as {
-    promptLesson?: { title: string; topic: string; brief: string; sample: string };
+    promptLesson?: {
+      title: string;
+      topic: string;
+      situation: string;
+      overview: string;
+      methodGuide: string;
+      practiceChallenge: string;
+      samplePrompt: string;
+    };
     arenaWeekly?: { weekLabel: string; title: string; inputText: string; goldenResponse: string };
   };
 
@@ -23,8 +31,11 @@ export async function PATCH(request: NextRequest) {
       id: newId("pm"),
       title: body.promptLesson.title,
       topic: body.promptLesson.topic,
-      brief: body.promptLesson.brief,
-      sample: body.promptLesson.sample,
+      situation: body.promptLesson.situation,
+      overview: body.promptLesson.overview,
+      methodGuide: body.promptLesson.methodGuide,
+      practiceChallenge: body.promptLesson.practiceChallenge,
+      samplePrompt: body.promptLesson.samplePrompt,
     });
   }
 
