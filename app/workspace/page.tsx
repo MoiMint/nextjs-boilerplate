@@ -20,48 +20,35 @@ type User = {
 
 type HistoryItem = { id: string; title: string; score: number; feedback: string; createdAt: string };
 type Post = { id: string; userName: string; content: string; createdAt: string };
-type Tab = "dashboard" | "courses" | "history" | "community" | "admin";
-type Pillar = "master" | "arena" | "auditor";
+type Tab = "dashboard" | "promptmaster" | "arena" | "auditor" | "history" | "community" | "admin";
+type PromptMasterLesson = {
+  id: string;
+  title: string;
+  topic: string;
+  brief: string;
+  sample: string;
+};
+
+type ArenaWeekly = {
+  weekLabel: string;
+  title: string;
+  inputText: string;
+  goldenResponse: string;
+};
+
+type AuditorScenario = {
+  title: string;
+  wrongAnswer: string;
+  requiredIssues: string[];
+};
+
+type AppConfig = {
+  promptMasterLessons: PromptMasterLesson[];
+  arenaWeekly: ArenaWeekly;
+  auditorScenario: AuditorScenario;
+};
 
 const SESSION_TOKEN_KEY = "blabla-session-token";
-
-const courseCatalog: Array<{
-  id: Pillar;
-  title: string;
-  summary: string;
-  steps: Array<{ id: string; title: string; guide: string }>;
-}> = [
-  {
-    id: "master",
-    title: "Prompt Master - Sản phẩm hóa kiến thức",
-    summary: "Biến brief thực tế thành output chuyên nghiệp (email, kế hoạch, kịch bản).",
-    steps: [
-      { id: "m1", title: "Phân tích dữ liệu gốc", guide: "Tách mục tiêu, đối tượng, ràng buộc." },
-      { id: "m2", title: "Thiết kế Prompt có cấu trúc", guide: "Role -> Goal -> Constraints -> Output format." },
-      { id: "m3", title: "Đánh giá output", guide: "Kiểm tra đủ ý, đúng format, văn phong phù hợp." },
-    ],
-  },
-  {
-    id: "arena",
-    title: "Clean Prompt Arena - Tối ưu hiệu suất",
-    summary: "Rèn tư duy viết prompt ngắn gọn, chính xác, tiết kiệm token.",
-    steps: [
-      { id: "a1", title: "Bài toán trích xuất", guide: "Viết prompt ngắn, chỉ rõ output cần thiết." },
-      { id: "a2", title: "Giảm token thừa", guide: "Loại bỏ từ đệm, tránh lặp yêu cầu." },
-      { id: "a3", title: "So sánh hiệu suất", guide: "Đo accuracy/tokens để tối ưu chi phí." },
-    ],
-  },
-  {
-    id: "auditor",
-    title: "AI Auditor & Agent Architect",
-    summary: "Phát hiện ảo giác AI và thiết kế agent có guardrails an toàn.",
-    steps: [
-      { id: "u1", title: "Tìm lỗi sai cố ý", guide: "Đặt prompt bắt AI kiểm chứng theo nguồn." },
-      { id: "u2", title: "Thiết kế guardrails", guide: "Đặt điều kiện dừng, escalation cho người thật." },
-      { id: "u3", title: "Kiến trúc Agent", guide: "Persona -> Task -> Tools -> Constraints." },
-    ],
-  },
-];
 
 export default function WorkspacePage() {
   const router = useRouter();
@@ -73,18 +60,40 @@ export default function WorkspacePage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [config, setConfig] = useState<AppConfig | null>(null);
 
-  const [selectedCourse, setSelectedCourse] = useState<Pillar>("master");
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [studentPrompt, setStudentPrompt] = useState("");
-  const [aiDiscussion, setAiDiscussion] = useState("");
-  const [courseResult, setCourseResult] = useState<{ score: number; feedback: string; isPassed: boolean } | null>(null);
+  const [selectedLessonId, setSelectedLessonId] = useState<string>("");
+  const [masterPrompt, setMasterPrompt] = useState("");
+  const [masterOutput, setMasterOutput] = useState("");
+  const [masterResult, setMasterResult] = useState<string>("");
+
+  const [arenaPrompt, setArenaPrompt] = useState("");
+  const [arenaOutput, setArenaOutput] = useState("");
+  const [arenaResult, setArenaResult] = useState<string>("");
+  const [leaderboard, setLeaderboard] = useState<
+    Array<{ id: string; userName: string; accuracy: number; tokens: number; efficiency: number }>
+  >([]);
+
+  const [auditorIssues, setAuditorIssues] = useState("");
+  const [auditorRePrompt, setAuditorRePrompt] = useState("");
+  const [auditorResult, setAuditorResult] = useState("");
 
   const [communityInput, setCommunityInput] = useState("");
+
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPass, setAdminPass] = useState("");
   const [adminMsg, setAdminMsg] = useState("");
+
+  const [newLessonTitle, setNewLessonTitle] = useState("");
+  const [newLessonTopic, setNewLessonTopic] = useState("");
+  const [newLessonBrief, setNewLessonBrief] = useState("");
+  const [newLessonSample, setNewLessonSample] = useState("");
+
+  const [newArenaWeek, setNewArenaWeek] = useState("");
+  const [newArenaTitle, setNewArenaTitle] = useState("");
+  const [newArenaInput, setNewArenaInput] = useState("");
+  const [newArenaGolden, setNewArenaGolden] = useState("");
 
   const token = typeof window !== "undefined" ? localStorage.getItem(SESSION_TOKEN_KEY) : null;
   const authHeaders = useMemo(
@@ -92,9 +101,9 @@ export default function WorkspacePage() {
     [token],
   );
 
-  const activeCourse = useMemo(
-    () => courseCatalog.find((course) => course.id === selectedCourse) ?? courseCatalog[0],
-    [selectedCourse],
+  const selectedLesson = useMemo(
+    () => config?.promptMasterLessons.find((l) => l.id === selectedLessonId) ?? config?.promptMasterLessons[0],
+    [config, selectedLessonId],
   );
 
   const loadMe = useCallback(async () => {
@@ -127,6 +136,25 @@ export default function WorkspacePage() {
     setAllUsers(data.users);
   }, [token]);
 
+  const loadConfig = useCallback(async () => {
+    const res = await fetch("/api/config");
+    if (!res.ok) return;
+    const data = (await res.json()) as { config: AppConfig };
+    setConfig(data.config);
+    if (!selectedLessonId && data.config.promptMasterLessons.length) {
+      setSelectedLessonId(data.config.promptMasterLessons[0].id);
+    }
+  }, [selectedLessonId]);
+
+  const loadLeaderboard = useCallback(async () => {
+    const res = await fetch("/api/arena/leaderboard");
+    if (!res.ok) return;
+    const data = (await res.json()) as {
+      leaderboard: Array<{ id: string; userName: string; accuracy: number; tokens: number; efficiency: number }>;
+    };
+    setLeaderboard(data.leaderboard);
+  }, []);
+
   useEffect(() => {
     if (!token) {
       router.push("/login");
@@ -135,7 +163,9 @@ export default function WorkspacePage() {
     loadMe();
     loadHistories();
     loadPosts();
-  }, [router, token, loadMe, loadHistories, loadPosts]);
+    loadConfig();
+    loadLeaderboard();
+  }, [router, token, loadMe, loadHistories, loadPosts, loadConfig, loadLeaderboard]);
 
   useEffect(() => {
     if (me?.isAdmin) {
@@ -147,93 +177,104 @@ export default function WorkspacePage() {
     if (!token) return;
     const timer = setInterval(() => {
       void loadPosts();
+      void loadLeaderboard();
     }, 3000);
 
     return () => clearInterval(timer);
-  }, [token, loadPosts]);
+  }, [token, loadPosts, loadLeaderboard]);
 
   const avgScore = histories.length
     ? Math.round(histories.reduce((sum, item) => sum + item.score, 0) / histories.length)
     : 0;
 
   const completedCourses = new Set(
-    histories
-      .filter((item) => item.title.startsWith("Khoá học:"))
-      .map((item) => item.title.replace("Khoá học: ", "").toLowerCase()),
+    histories.filter((item) => item.title.startsWith("Khoá Prompt Master")).map((item) => item.title),
   ).size;
 
-  const resetCourseFlow = (course: Pillar) => {
-    setSelectedCourse(course);
-    setCurrentStepIndex(0);
-    setStudentPrompt("");
-    setAiDiscussion("");
-    setCourseResult(null);
-  };
-
-  const askAiInStep = async () => {
-    if (!studentPrompt.trim()) return;
+  const submitPromptMaster = async () => {
+    if (!selectedLesson) return;
     setLoading(true);
-    const step = activeCourse.steps[currentStepIndex];
-    const response = await fetch("/api/ai", {
+
+    const judgePrompt = `\nYêu cầu nhiệm vụ: ${selectedLesson.brief}\nMẫu tham khảo: ${selectedLesson.sample}\nBài làm của người dùng:\nPrompt: ${masterPrompt}\nOutput: ${masterOutput}\n\nChấm điểm theo tiêu chí Prompt Master.`;
+
+    const res = await fetch("/api/ai", {
       method: "POST",
       headers: authHeaders,
-      body: JSON.stringify({
-        context: `${activeCourse.title} | Bước ${currentStepIndex + 1}: ${step.title}`,
-        prompt: `Người học hỏi: ${studentPrompt}\nHãy hướng dẫn ngắn gọn cách làm đúng và cảnh báo lỗi thường gặp.`,
-      }),
+      body: JSON.stringify({ context: "Prompt Master Judge", prompt: judgePrompt }),
     });
 
-    const data = (await response.json()) as { feedback?: string; error?: string };
-    setAiDiscussion(response.ok ? data.feedback ?? "AI không phản hồi." : data.error ?? "AI tạm thời lỗi.");
-    setLoading(false);
-  };
-
-  const completeCurrentStep = () => {
-    if (currentStepIndex < activeCourse.steps.length - 1) {
-      setCurrentStepIndex((prev) => prev + 1);
-      setStudentPrompt("");
-      setAiDiscussion("");
-      return;
-    }
-
-    void finishCourse();
-  };
-
-  const finishCourse = async () => {
-    setLoading(true);
-    const summaryPrompt = `Hãy đánh giá kết quả học viên cho khoá ${activeCourse.title}.\nCác bước đã hoàn thành: ${activeCourse.steps.map((s) => s.title).join(", ")}\nDựa trên mức độ hoàn thành, trả feedback ngắn gọn, khắt khe và điểm số.`;
-
-    const aiRes = await fetch("/api/ai", {
-      method: "POST",
-      headers: authHeaders,
-      body: JSON.stringify({ context: `Course Final Review - ${activeCourse.id}`, prompt: summaryPrompt }),
-    });
-
-    const aiData = (await aiRes.json()) as { score?: number; feedback?: string; error?: string };
-    const finalScore = aiRes.ok ? aiData.score ?? 75 : 65;
-    const finalFeedback = aiRes.ok
-      ? aiData.feedback ?? "Bạn đã hoàn thành khoá học."
-      : aiData.error ?? "Không gọi được AI evaluator.";
-
-    const final = {
-      score: finalScore,
-      feedback: finalFeedback,
-      isPassed: finalScore >= 70,
-    };
-    setCourseResult(final);
+    const data = (await res.json()) as { score?: number; feedback?: string; error?: string };
+    const score = res.ok ? data.score ?? 70 : 60;
+    const feedback = res.ok ? data.feedback ?? "Không có nhận xét." : data.error ?? "AI lỗi.";
 
     await fetch("/api/history", {
       method: "POST",
       headers: authHeaders,
       body: JSON.stringify({
-        type: activeCourse.id,
-        title: `Khoá học: ${activeCourse.title}`,
-        score: final.score,
-        feedback: final.feedback,
+        type: "master",
+        title: `Khoá Prompt Master: ${selectedLesson.title}`,
+        score,
+        feedback,
       }),
     });
 
     await loadHistories();
+    setMasterResult(`Điểm: ${score}% | Nhận xét: ${feedback}`);
+    setLoading(false);
+  };
+
+  const submitArena = async () => {
+    setLoading(true);
+    const res = await fetch("/api/arena/submit", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ prompt: arenaPrompt, output: arenaOutput }),
+    });
+    const data = (await res.json()) as { accuracy?: number; tokens?: number; efficiency?: number; error?: string };
+
+    if (!res.ok) {
+      setArenaResult(data.error ?? "Nộp Arena thất bại.");
+      setLoading(false);
+      return;
+    }
+
+    setArenaResult(
+      `Accuracy: ${data.accuracy}% | Tokens: ${data.tokens} | Efficiency: ${data.efficiency}`,
+    );
+    await loadLeaderboard();
+    await loadHistories();
+    setLoading(false);
+  };
+
+  const submitAuditor = async () => {
+    if (!config) return;
+    setLoading(true);
+
+    const judgePrompt = `\nDanh sách lỗi đúng cần tìm: ${config.auditorScenario.requiredIssues.join(", ")}\nNgười dùng phát hiện lỗi: ${auditorIssues}\nPrompt sửa của người dùng: ${auditorRePrompt}\nHãy chấm theo rubric AI Auditor.`;
+
+    const res = await fetch("/api/ai", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ context: "AI Auditor Judge", prompt: judgePrompt }),
+    });
+
+    const data = (await res.json()) as { score?: number; feedback?: string; error?: string };
+    const score = res.ok ? data.score ?? 75 : 65;
+    const feedback = res.ok ? data.feedback ?? "Không có nhận xét." : data.error ?? "AI lỗi.";
+
+    await fetch("/api/history", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({
+        type: "auditor",
+        title: `AI Auditor: ${config.auditorScenario.title}`,
+        score,
+        feedback,
+      }),
+    });
+
+    await loadHistories();
+    setAuditorResult(`Điểm: ${score}% | Nhận xét: ${feedback}`);
     setLoading(false);
   };
 
@@ -264,6 +305,57 @@ export default function WorkspacePage() {
     }
   };
 
+  const addPromptLesson = async () => {
+    const res = await fetch("/api/config", {
+      method: "PATCH",
+      headers: authHeaders,
+      body: JSON.stringify({
+        promptLesson: {
+          title: newLessonTitle,
+          topic: newLessonTopic,
+          brief: newLessonBrief,
+          sample: newLessonSample,
+        },
+      }),
+    });
+    if (!res.ok) {
+      setAdminMsg("Không thêm được lesson.");
+      return;
+    }
+    setAdminMsg("Đã thêm khóa Prompt Master.");
+    setNewLessonTitle("");
+    setNewLessonTopic("");
+    setNewLessonBrief("");
+    setNewLessonSample("");
+    loadConfig();
+  };
+
+  const updateArenaWeekly = async () => {
+    const res = await fetch("/api/config", {
+      method: "PATCH",
+      headers: authHeaders,
+      body: JSON.stringify({
+        arenaWeekly: {
+          weekLabel: newArenaWeek,
+          title: newArenaTitle,
+          inputText: newArenaInput,
+          goldenResponse: newArenaGolden,
+        },
+      }),
+    });
+    if (!res.ok) {
+      setAdminMsg("Không cập nhật được Arena tuần.");
+      return;
+    }
+    setAdminMsg("Đã cập nhật challenge tuần cho Arena.");
+    setNewArenaWeek("");
+    setNewArenaTitle("");
+    setNewArenaInput("");
+    setNewArenaGolden("");
+    loadConfig();
+    loadLeaderboard();
+  };
+
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 md:px-8 md:py-8">
       <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[260px_1fr]">
@@ -273,19 +365,17 @@ export default function WorkspacePage() {
           <p className="mt-1 text-xs text-cyan-300">Chuỗi đăng nhập: {me?.loginStreak ?? 0} ngày</p>
 
           <div className="mt-5 space-y-2">
-            {(["dashboard", "courses", "history", "community", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]).map(
-              (key) => (
-                <button
-                  key={key}
-                  onClick={() => setActiveTab(key)}
-                  className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-all duration-300 ${
-                    activeTab === key ? "bg-cyan-400 text-slate-950" : "bg-white/5"
-                  }`}
-                >
-                  {key}
-                </button>
-              ),
-            )}
+            {(["dashboard", "promptmaster", "arena", "auditor", "history", "community", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-all duration-300 ${
+                  activeTab === key ? "bg-cyan-400 text-slate-950" : "bg-white/5"
+                }`}
+              >
+                {key}
+              </button>
+            ))}
           </div>
 
           <button
@@ -301,150 +391,99 @@ export default function WorkspacePage() {
 
         <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-900/50 p-4 scrollbar-pro max-h-[84vh] overflow-y-auto">
           <div className="grid gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs">Điểm trung bình</p>
-              <p className="text-2xl font-bold">{avgScore}%</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs">Số ngày đăng nhập</p>
-              <p className="text-2xl font-bold">{me?.totalLoginDays ?? 0}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs">Chuỗi hiện tại</p>
-              <p className="text-2xl font-bold text-emerald-300">{me?.loginStreak ?? 0} ngày</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs">Khoá học hoàn thành</p>
-              <p className="text-2xl font-bold text-cyan-300">{completedCourses}</p>
-            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Điểm trung bình</p><p className="text-2xl font-bold">{avgScore}%</p></div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Số ngày đăng nhập</p><p className="text-2xl font-bold">{me?.totalLoginDays ?? 0}</p></div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Chuỗi hiện tại</p><p className="text-2xl font-bold text-emerald-300">{me?.loginStreak ?? 0} ngày</p></div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Khoá PromptMaster đã xong</p><p className="text-2xl font-bold text-cyan-300">{completedCourses}</p></div>
           </div>
 
-          {activeTab === "dashboard" ? (
+          {activeTab === "dashboard" && (
             <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
-              <p className="mt-2 text-sm text-slate-300">
-                Theo dõi tiến độ học tập, nhịp đăng nhập hằng ngày, hiệu suất prompt và mức độ hoàn thành khóa học.
-              </p>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-slate-800/70 p-4">
-                  <p className="font-semibold">Mục tiêu tuần</p>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-300">
-                    <li>Hoàn thành 1 khóa Prompt Master.</li>
-                    <li>Duy trì chuỗi đăng nhập &gt;= 5 ngày.</li>
-                    <li>Nâng điểm trung bình lên &gt;= 80.</li>
-                  </ul>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-slate-800/70 p-4">
-                  <p className="font-semibold">Tóm tắt</p>
-                  <p className="mt-2 text-sm text-slate-300">
-                    Bạn đã đăng nhập {me?.loginCount ?? 0} lần. Lần cuối: {me?.lastLoginDate ? new Date(me.lastLoginDate).toLocaleString("vi-VN") : "-"}.
-                  </p>
-                </div>
-              </div>
+              <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
             </div>
-          ) : null}
+          )}
 
-          {activeTab === "courses" ? (
+          {activeTab === "promptmaster" && config && (
             <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
-              <h2 className="text-xl font-semibold text-cyan-200">Khoá học AI theo lộ trình</h2>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                {courseCatalog.map((course) => (
-                  <button
-                    key={course.id}
-                    onClick={() => resetCourseFlow(course.id)}
-                    className={`rounded-xl border p-4 text-left transition ${
-                      selectedCourse === course.id
-                        ? "border-cyan-300 bg-cyan-500/10"
-                        : "border-white/10 bg-slate-800/60"
-                    }`}
-                  >
-                    <p className="font-semibold">{course.title}</p>
-                    <p className="mt-2 text-xs text-slate-300">{course.summary}</p>
+              <h2 className="text-xl font-semibold text-cyan-200">Prompt Master - Nhiều khóa học</h2>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {config.promptMasterLessons.map((lesson) => (
+                  <button key={lesson.id} onClick={() => setSelectedLessonId(lesson.id)} className={`rounded-lg border p-3 text-left ${selectedLesson?.id===lesson.id?'border-cyan-300 bg-cyan-500/10':'border-white/10 bg-slate-800/70'}`}>
+                    <p className="font-semibold">{lesson.title}</p>
+                    <p className="text-xs text-slate-300">{lesson.topic}</p>
                   </button>
                 ))}
               </div>
 
-              <div className="mt-5 rounded-xl border border-white/10 bg-slate-800/70 p-4">
-                <p className="text-sm text-cyan-200">
-                  Bước {currentStepIndex + 1}/{activeCourse.steps.length}: {activeCourse.steps[currentStepIndex].title}
-                </p>
-                <p className="mt-2 text-sm text-slate-300">{activeCourse.steps[currentStepIndex].guide}</p>
-
-                <textarea
-                  value={studentPrompt}
-                  onChange={(e) => setStudentPrompt(e.target.value)}
-                  className="mt-3 h-28 w-full rounded-lg border border-white/15 bg-slate-900 p-2"
-                  placeholder="Nhập prompt hoặc câu hỏi của bạn trong bước này..."
-                />
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    onClick={askAiInStep}
-                    disabled={loading}
-                    className="rounded-lg bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950"
-                  >
-                    {loading ? "AI đang phản hồi..." : "Hỏi & trao đổi với AI"}
-                  </button>
-                  <button
-                    onClick={completeCurrentStep}
-                    disabled={loading}
-                    className="rounded-lg border border-emerald-300/40 px-3 py-2 text-sm font-semibold text-emerald-200"
-                  >
-                    {currentStepIndex < activeCourse.steps.length - 1 ? "Hoàn thành bước" : "Kết thúc khoá học"}
-                  </button>
+              {selectedLesson && (
+                <div className="mt-4 rounded-lg border border-white/10 bg-slate-800/70 p-4">
+                  <p className="text-sm text-cyan-200">Đề bài: {selectedLesson.brief}</p>
+                  <p className="mt-2 text-xs text-slate-300">Mẫu gợi ý: {selectedLesson.sample}</p>
+                  <textarea value={masterPrompt} onChange={(e)=>setMasterPrompt(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Viết prompt của bạn..."/>
+                  <textarea value={masterOutput} onChange={(e)=>setMasterOutput(e.target.value)} className="mt-2 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Dán output AI tạo ra..."/>
+                  <button onClick={submitPromptMaster} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">{loading?"AI đang chấm...":"Chấm điểm bằng AI thật"}</button>
+                  {masterResult ? <p className="mt-2 text-sm text-slate-200">{masterResult}</p> : null}
                 </div>
+              )}
+            </div>
+          )}
 
-                {aiDiscussion ? (
-                  <div className="mt-3 rounded-lg border border-cyan-300/30 bg-cyan-500/10 p-3 text-sm">
-                    <p className="font-semibold text-cyan-200">AI phản hồi</p>
-                    <p className="mt-1 text-slate-100">{aiDiscussion}</p>
+          {activeTab === "arena" && config && (
+            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+              <h2 className="text-xl font-semibold text-cyan-200">Clean Prompt Arena - Chủ đề tuần</h2>
+              <p className="mt-2 text-sm text-slate-300">{config.arenaWeekly.weekLabel}: {config.arenaWeekly.title}</p>
+              <p className="mt-2 rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">Input: {config.arenaWeekly.inputText}</p>
+              <textarea value={arenaPrompt} onChange={(e)=>setArenaPrompt(e.target.value)} className="mt-3 h-20 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Prompt của bạn"/>
+              <textarea value={arenaOutput} onChange={(e)=>setArenaOutput(e.target.value)} className="mt-2 h-20 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Output AI của bạn"/>
+              <button onClick={submitArena} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">Nộp Arena</button>
+              {arenaResult ? <p className="mt-2 text-sm">{arenaResult}</p> : null}
+
+              <h3 className="mt-5 text-lg font-semibold text-cyan-200">Leaderboard Accuracy / Tokens</h3>
+              <div className="mt-2 space-y-2">
+                {leaderboard.map((item, idx) => (
+                  <div key={item.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
+                    #{idx + 1} {item.userName} - Accuracy {item.accuracy}% | Tokens {item.tokens} | Efficiency {item.efficiency}
                   </div>
-                ) : null}
-              </div>
-
-              {courseResult ? (
-                <div className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-500/10 p-4">
-                  <p className="font-semibold text-emerald-200">Đánh giá cuối khoá</p>
-                  <p className="mt-1 text-2xl font-bold">{courseResult.score}%</p>
-                  <p className="mt-1 text-sm text-slate-200">{courseResult.feedback}</p>
-                  <p className="mt-1 text-xs text-slate-300">{courseResult.isPassed ? "Đạt yêu cầu" : "Cần luyện thêm"}</p>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {activeTab === "history" ? (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
-              <h2 className="text-xl font-semibold text-cyan-200">Lịch sử & kết quả cá nhân</h2>
-              <div className="mt-4 space-y-3">
-                {histories.map((item) => (
-                  <article key={item.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-4">
-                    <div className="flex justify-between">
-                      <p>{item.title}</p>
-                      <p className="font-bold text-emerald-300">{item.score}%</p>
-                    </div>
-                    <p className="text-sm text-slate-300">{item.feedback}</p>
-                  </article>
                 ))}
               </div>
             </div>
-          ) : null}
+          )}
 
-          {activeTab === "community" ? (
+          {activeTab === "auditor" && config && (
             <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
-              <h2 className="text-xl font-semibold text-cyan-200">Cộng đồng học AI</h2>
-              <div className="mt-3 flex gap-2">
-                <input
-                  value={communityInput}
-                  onChange={(e) => setCommunityInput(e.target.value)}
-                  className="flex-1 rounded-lg border border-white/15 bg-slate-800 p-2"
-                  placeholder="Chia sẻ bài học, prompt hay..."
-                />
-                <button onClick={postCommunity} className="rounded-lg bg-cyan-400 px-3 py-2 font-semibold text-slate-950">
-                  Đăng
-                </button>
+              <h2 className="text-xl font-semibold text-cyan-200">AI Auditor</h2>
+              <p className="mt-2 text-sm text-slate-300">Câu trả lời AI sai: {config.auditorScenario.wrongAnswer}</p>
+              <p className="mt-1 text-xs text-slate-400">Nhiệm vụ: nêu lỗi và viết prompt sửa để AI ra đúng.</p>
+              <textarea value={auditorIssues} onChange={(e)=>setAuditorIssues(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Nêu các lỗi bạn phát hiện..."/>
+              <textarea value={auditorRePrompt} onChange={(e)=>setAuditorRePrompt(e.target.value)} className="mt-2 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Prompt sửa lại để AI trả lời đúng..."/>
+              <button onClick={submitAuditor} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">Chấm điểm Auditor</button>
+              {auditorResult ? <p className="mt-2 text-sm">{auditorResult}</p> : null}
+            </div>
+          )}
+
+          {activeTab === "history" && (
+            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+              <h2 className="text-xl font-semibold text-cyan-200">Lịch sử cá nhân</h2>
+              <div className="mt-3 space-y-2">
+                {histories.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
+                    <div className="flex justify-between"><p>{item.title}</p><p className="font-bold text-emerald-300">{item.score}%</p></div>
+                    <p className="text-slate-300">{item.feedback}</p>
+                  </div>
+                ))}
               </div>
-              <div className="mt-4 space-y-2">
+            </div>
+          )}
+
+          {activeTab === "community" && (
+            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+              <h2 className="text-xl font-semibold text-cyan-200">Cộng đồng</h2>
+              <div className="mt-3 flex gap-2">
+                <input value={communityInput} onChange={(e)=>setCommunityInput(e.target.value)} className="flex-1 rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Chia sẻ prompt hay..."/>
+                <button onClick={postCommunity} className="rounded-lg bg-cyan-400 px-3 py-2 font-semibold text-slate-950">Đăng</button>
+              </div>
+              <div className="mt-3 space-y-2">
                 {posts.map((post) => (
                   <div key={post.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3">
                     <p className="text-sm font-semibold text-cyan-200">{post.userName}</p>
@@ -453,72 +492,64 @@ export default function WorkspacePage() {
                 ))}
               </div>
             </div>
-          ) : null}
+          )}
 
-          {activeTab === "admin" && me?.isAdmin ? (
+          {activeTab === "admin" && me?.isAdmin && (
             <div className="rounded-2xl border border-amber-300/20 bg-amber-400/10 p-5">
               <h2 className="text-xl font-semibold text-amber-200">Admin Control</h2>
+
               <div className="mt-3 grid gap-2 md:grid-cols-3">
-                <input
-                  value={adminName}
-                  onChange={(e) => setAdminName(e.target.value)}
-                  className="rounded-lg border border-white/15 bg-slate-800 p-2"
-                  placeholder="Tên admin"
-                />
-                <input
-                  value={adminEmail}
-                  onChange={(e) => setAdminEmail(e.target.value)}
-                  className="rounded-lg border border-white/15 bg-slate-800 p-2"
-                  placeholder="Email admin"
-                />
-                <input
-                  value={adminPass}
-                  onChange={(e) => setAdminPass(e.target.value)}
-                  className="rounded-lg border border-white/15 bg-slate-800 p-2"
-                  placeholder="Password"
-                />
+                <input value={adminName} onChange={(e)=>setAdminName(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên admin"/>
+                <input value={adminEmail} onChange={(e)=>setAdminEmail(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Email admin"/>
+                <input value={adminPass} onChange={(e)=>setAdminPass(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Password"/>
               </div>
-              <button onClick={createAdmin} className="mt-2 rounded-lg bg-amber-300 px-4 py-2 font-semibold text-slate-950">
-                Tạo admin mới
-              </button>
-              {adminMsg ? <p className="mt-2 text-sm">{adminMsg}</p> : null}
+              <button onClick={createAdmin} className="mt-2 rounded-lg bg-amber-300 px-4 py-2 font-semibold text-slate-950">Tạo admin mới</button>
+
+              <h3 className="mt-4 font-semibold text-amber-200">Thêm khóa Prompt Master</h3>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <input value={newLessonTitle} onChange={(e)=>setNewLessonTitle(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên khóa"/>
+                <input value={newLessonTopic} onChange={(e)=>setNewLessonTopic(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Chủ đề"/>
+                <input value={newLessonBrief} onChange={(e)=>setNewLessonBrief(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Đề bài"/>
+                <input value={newLessonSample} onChange={(e)=>setNewLessonSample(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Mẫu prompt"/>
+              </div>
+              <button onClick={addPromptLesson} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm khóa Prompt Master</button>
+
+              <h3 className="mt-4 font-semibold text-amber-200">Thay đổi đề bài Arena tuần</h3>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <input value={newArenaWeek} onChange={(e)=>setNewArenaWeek(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Week label"/>
+                <input value={newArenaTitle} onChange={(e)=>setNewArenaTitle(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên challenge"/>
+                <input value={newArenaInput} onChange={(e)=>setNewArenaInput(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Input text"/>
+                <input value={newArenaGolden} onChange={(e)=>setNewArenaGolden(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Golden response"/>
+              </div>
+              <button onClick={updateArenaWeekly} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Cập nhật Arena tuần</button>
+
+              {adminMsg ? <p className="mt-3 text-sm">{adminMsg}</p> : null}
 
               <div className="mt-4 space-y-2">
                 {allUsers.map((user) => (
                   <div key={user.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <p>
-                        {user.name} - {user.email} ({user.role})
-                      </p>
-                      <button
-                        onClick={() => setSelectedUser(user)}
-                        className="rounded-md border border-cyan-300/40 px-2 py-1 text-xs text-cyan-200"
-                      >
-                        Xem chi tiết
-                      </button>
+                      <p>{user.name} - {user.email} ({user.role})</p>
+                      <button onClick={()=>setSelectedUser(user)} className="rounded-md border border-cyan-300/40 px-2 py-1 text-xs text-cyan-200">Xem chi tiết</button>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {selectedUser ? (
+              {selectedUser && (
                 <div className="mt-4 rounded-lg border border-cyan-300/30 bg-slate-900/80 p-4 text-sm">
-                  <p className="font-semibold text-cyan-200">Chi tiết tài khoản: {selectedUser.name}</p>
+                  <p className="font-semibold text-cyan-200">User Dashboard: {selectedUser.name}</p>
                   <p>Email: {selectedUser.email}</p>
                   <p>Vai trò: {selectedUser.role}</p>
-                  <p>Ngày tạo: {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleString("vi-VN") : "-"}</p>
                   <p>Số bài đã nộp: {selectedUser.stats?.historyCount ?? 0}</p>
                   <p>Số bài cộng đồng: {selectedUser.stats?.postCount ?? 0}</p>
-                  <p>
-                    Đăng nhập gần nhất: {selectedUser.stats?.lastSessionAt
-                      ? new Date(selectedUser.stats.lastSessionAt).toLocaleString("vi-VN")
-                      : "-"}
-                  </p>
                   <p>Chuỗi đăng nhập: {selectedUser.loginStreak ?? 0} ngày</p>
+                  <p>Tổng ngày đăng nhập: {selectedUser.totalLoginDays ?? 0}</p>
+                  <p>Lần đăng nhập gần nhất: {selectedUser.stats?.lastSessionAt ? new Date(selectedUser.stats.lastSessionAt).toLocaleString("vi-VN") : "-"}</p>
                 </div>
-              ) : null}
+              )}
             </div>
-          ) : null}
+          )}
         </section>
       </div>
     </main>

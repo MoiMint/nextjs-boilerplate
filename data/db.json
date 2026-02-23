@@ -16,5 +16,39 @@
   ],
   "sessions": [],
   "histories": [],
-  "posts": []
+  "posts": [],
+  "arenaSubmissions": [],
+  "config": {
+    "promptMasterLessons": [
+      {
+        "id": "pm-1",
+        "title": "Email xử lý khủng hoảng truyền thông",
+        "topic": "Truyền thông",
+        "brief": "Khách hàng phàn nàn về giao hàng trễ 5 ngày. Viết email xin lỗi + kế hoạch xử lý.",
+        "sample": "Vai trò: Chuyên viên CSKH cao cấp. Mục tiêu: Viết email xin lỗi chuyên nghiệp, nêu 3 hành động khắc phục, kết thúc bằng ưu đãi."
+      },
+      {
+        "id": "pm-2",
+        "title": "Tóm tắt biên bản họp thành action plan",
+        "topic": "Vận hành",
+        "brief": "Biên bản họp dài, lộn xộn. Hãy tạo 5 hành động có owner và deadline.",
+        "sample": "Vai trò: PMO. Output dạng bảng Markdown gồm: Action | Owner | Deadline | Priority."
+      }
+    ],
+    "arenaWeekly": {
+      "weekLabel": "Tuần 1",
+      "title": "Trích xuất số điện thoại",
+      "inputText": "Liên hệ: 0901234567, 0911222333, hotline 02873009999.",
+      "goldenResponse": "[\"0901234567\",\"0911222333\",\"02873009999\"]"
+    },
+    "auditorScenario": {
+      "title": "Bắt lỗi ảo giác trong báo cáo AI",
+      "wrongAnswer": "Việt Nam có 70 tỉnh thành, thủ đô đặt tại TP.HCM, và đồng tiền chính là Dollar Việt Nam.",
+      "requiredIssues": [
+        "Việt Nam có 63 tỉnh thành",
+        "Thủ đô là Hà Nội",
+        "Đồng tiền là Việt Nam Đồng (VND)"
+      ]
+    }
+  }
 }

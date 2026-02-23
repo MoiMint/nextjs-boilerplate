@@ -2,6 +2,27 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 
+type PromptMasterLesson = {
+  id: string;
+  title: string;
+  topic: string;
+  brief: string;
+  sample: string;
+};
+
+type ArenaWeeklyChallenge = {
+  weekLabel: string;
+  title: string;
+  inputText: string;
+  goldenResponse: string;
+};
+
+type AuditorScenario = {
+  title: string;
+  wrongAnswer: string;
+  requiredIssues: string[];
+};
+
 export type DBUser = {
   id: string;
   name: string;
@@ -30,6 +51,7 @@ export type DBHistory = {
   score: number;
   feedback: string;
   createdAt: string;
+  meta?: Record<string, string | number | boolean>;
 };
 
 export type DBPost = {
@@ -40,14 +62,112 @@ export type DBPost = {
   createdAt: string;
 };
 
+export type DBArenaSubmission = {
+  id: string;
+  userId: string;
+  userName: string;
+  accuracy: number;
+  tokens: number;
+  efficiency: number;
+  prompt: string;
+  createdAt: string;
+};
+
+export type DBConfig = {
+  promptMasterLessons: PromptMasterLesson[];
+  arenaWeekly: ArenaWeeklyChallenge;
+  auditorScenario: AuditorScenario;
+};
+
 export type DBShape = {
   users: DBUser[];
   sessions: DBSession[];
   histories: DBHistory[];
   posts: DBPost[];
+  arenaSubmissions: DBArenaSubmission[];
+  config: DBConfig;
 };
 
 const dbPath = path.join(process.cwd(), "data", "db.json");
+
+async function readFromVercelKV() {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null as DBShape | null;
+
+  try {
+    const response = await fetch(`${url}/get/blabla_db`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { result?: string | DBShape | null };
+    if (!data.result) return null;
+    if (typeof data.result === "string") return JSON.parse(data.result) as DBShape;
+    return data.result as DBShape;
+  } catch {
+    return null;
+  }
+}
+
+async function writeToVercelKV(data: DBShape) {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return false;
+
+  try {
+    const response = await fetch(`${url}/set/blabla_db`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+      cache: "no-store",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+const defaultConfig: DBConfig = {
+  promptMasterLessons: [
+    {
+      id: "pm-1",
+      title: "Email xử lý khủng hoảng truyền thông",
+      topic: "Truyền thông",
+      brief: "Khách hàng phàn nàn về giao hàng trễ 5 ngày. Viết email xin lỗi + kế hoạch xử lý.",
+      sample:
+        "Vai trò: Chuyên viên CSKH cao cấp. Mục tiêu: Viết email xin lỗi chuyên nghiệp, nêu 3 hành động khắc phục, kết thúc bằng ưu đãi.",
+    },
+    {
+      id: "pm-2",
+      title: "Tóm tắt biên bản họp thành action plan",
+      topic: "Vận hành",
+      brief: "Biên bản họp dài, lộn xộn. Hãy tạo 5 hành động có owner và deadline.",
+      sample:
+        "Vai trò: PMO. Output dạng bảng Markdown gồm: Action | Owner | Deadline | Priority.",
+    },
+  ],
+  arenaWeekly: {
+    weekLabel: "Tuần 1",
+    title: "Trích xuất số điện thoại",
+    inputText: "Liên hệ: 0901234567, 0911222333, hotline 02873009999.",
+    goldenResponse: '["0901234567","0911222333","02873009999"]',
+  },
+  auditorScenario: {
+    title: "Bắt lỗi ảo giác trong báo cáo AI",
+    wrongAnswer:
+      "Việt Nam có 70 tỉnh thành, thủ đô đặt tại TP.HCM, và đồng tiền chính là Dollar Việt Nam.",
+    requiredIssues: [
+      "Việt Nam có 63 tỉnh thành",
+      "Thủ đô là Hà Nội",
+      "Đồng tiền là Việt Nam Đồng (VND)",
+    ],
+  },
+};
 
 const adminSeed: DBUser = {
   id: "admin-seed",
@@ -68,6 +188,8 @@ const defaultDB = (): DBShape => ({
   sessions: [],
   histories: [],
   posts: [],
+  arenaSubmissions: [],
+  config: defaultConfig,
 });
 
 declare global {
@@ -90,17 +212,37 @@ function ensureUserStats(user: Partial<DBUser>): DBUser {
   };
 }
 
+function ensureConfig(config?: Partial<DBConfig>): DBConfig {
+  return {
+    promptMasterLessons: config?.promptMasterLessons?.length
+      ? config.promptMasterLessons
+      : defaultConfig.promptMasterLessons,
+    arenaWeekly: config?.arenaWeekly ?? defaultConfig.arenaWeekly,
+    auditorScenario: config?.auditorScenario ?? defaultConfig.auditorScenario,
+  };
+}
+
 function ensureAdmin(db: DBShape): DBShape {
   db.users = db.users.map((u) => ensureUserStats(u));
   if (!db.users.some((u) => u.isAdmin)) {
     db.users.unshift(adminSeed);
   }
+
+  db.arenaSubmissions = db.arenaSubmissions ?? [];
+  db.config = ensureConfig(db.config);
   return db;
 }
 
 export async function readDB(): Promise<DBShape> {
   if (global.__blablaDBCache) {
     return ensureAdmin(global.__blablaDBCache);
+  }
+
+  const kvData = await readFromVercelKV();
+  if (kvData) {
+    const parsed = ensureAdmin(kvData);
+    global.__blablaDBCache = parsed;
+    return parsed;
   }
 
   try {
@@ -118,6 +260,10 @@ export async function readDB(): Promise<DBShape> {
 export async function writeDB(data: DBShape) {
   const normalized = ensureAdmin(data);
   global.__blablaDBCache = normalized;
+
+  const wroteKV = await writeToVercelKV(normalized);
+
+  if (wroteKV) return;
 
   try {
     await fs.mkdir(path.dirname(dbPath), { recursive: true });
