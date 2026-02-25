@@ -19,7 +19,15 @@ export async function POST(request: NextRequest) {
   if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await request.json()) as {
-    action?: "buy_lesson" | "buy_item" | "plant_seed" | "water_plot" | "harvest_plot" | "set_dashboard_theme";
+    action?:
+      | "buy_lesson"
+      | "buy_item"
+      | "sell_item"
+      | "plant_seed"
+      | "water_plot"
+      | "harvest_plot"
+      | "abandon_plot"
+      | "set_dashboard_theme";
     lessonId?: string;
     itemId?: string;
     seedType?: string;
@@ -62,6 +70,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, coins: user.coins, ownedItemIds: user.ownedItemIds, activeDashboardTheme: user.activeDashboardTheme });
   }
 
+  if (body.action === "sell_item") {
+    const item = db.config.shopItems.find((i) => i.id === body.itemId);
+    if (!item) return NextResponse.json({ error: "Không tìm thấy vật phẩm." }, { status: 404 });
+    if (!user.ownedItemIds.includes(item.id)) return NextResponse.json({ error: "Bạn chưa sở hữu vật phẩm này." }, { status: 400 });
+
+    user.ownedItemIds = user.ownedItemIds.filter((id) => id !== item.id);
+    const refund = Math.max(1, Math.floor(item.price * 0.7));
+    user.coins += refund;
+
+    if (item.category === "dashboard-theme" && item.themeKey && user.activeDashboardTheme === item.themeKey) {
+      const fallbackTheme = db.config.shopItems.find(
+        (shopItem) =>
+          shopItem.category === "dashboard-theme" &&
+          shopItem.themeKey &&
+          user.ownedItemIds.includes(shopItem.id),
+      );
+      user.activeDashboardTheme = fallbackTheme?.themeKey ?? null;
+    }
+
+    await writeDB(db);
+    return NextResponse.json({ ok: true, coins: user.coins, refund, ownedItemIds: user.ownedItemIds, activeDashboardTheme: user.activeDashboardTheme });
+  }
+
   if (body.action === "set_dashboard_theme") {
     const themeKey = body.themeKey?.trim();
     if (!themeKey) return NextResponse.json({ error: "Thiếu themeKey." }, { status: 400 });
@@ -91,6 +122,21 @@ export async function POST(request: NextRequest) {
     };
     await writeDB(db);
     return NextResponse.json({ ok: true, coins: user.coins, farmPlot: user.farmPlot, seed });
+  }
+
+  if (body.action === "abandon_plot") {
+    if (!user.farmPlot.seedType) {
+      return NextResponse.json({ error: "Mảnh đất đang trống." }, { status: 400 });
+    }
+    user.farmPlot = {
+      seedType: null,
+      plantedAt: null,
+      wateredAt: null,
+      readyAt: null,
+      lastHarvestAt: user.farmPlot.lastHarvestAt,
+    };
+    await writeDB(db);
+    return NextResponse.json({ ok: true, farmPlot: user.farmPlot });
   }
 
   if (body.action === "water_plot") {
@@ -126,7 +172,7 @@ export async function POST(request: NextRequest) {
     const coinReward = seed?.reward ?? 100;
     user.coins += coinReward;
 
-    const decoDropMap = ["item-neon-frame", "item-sakura-lantern"];
+    const decoDropMap = ["item-garden-lamp", "item-garden-fountain", "item-neon-frame"];
     const droppedItem = Math.random() > 0.7 ? decoDropMap[Math.floor(Math.random() * decoDropMap.length)] : null;
     if (droppedItem && !user.ownedItemIds.includes(droppedItem)) user.ownedItemIds.push(droppedItem);
 

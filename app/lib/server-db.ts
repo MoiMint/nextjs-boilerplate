@@ -23,7 +23,7 @@ type ShopItem = {
   image: string;
   price: number;
   effect: string;
-  category?: "dashboard-theme" | "decoration";
+  category?: "dashboard-theme" | "dashboard-decoration" | "garden-decoration";
   themeKey?: string | null;
 };
 
@@ -238,8 +238,10 @@ const defaultConfig: DBConfig = {
   shopItems: [
     { id: "item-theme-pink", name: "Sơn hồng dashboard", image: "🎨", price: 180, effect: "Đổi dashboard sang chủ đề hồng", category: "dashboard-theme", themeKey: "pink" },
     { id: "item-theme-ocean", name: "Sơn đại dương", image: "🌊", price: 220, effect: "Đổi dashboard sang chủ đề đại dương", category: "dashboard-theme", themeKey: "ocean" },
-    { id: "item-neon-frame", name: "Viền neon", image: "💠", price: 140, effect: "Thêm viền phát sáng cho dashboard", category: "decoration", themeKey: null },
-    { id: "item-sakura-lantern", name: "Đèn sakura", image: "🏮", price: 200, effect: "Trang trí góc dashboard bằng đèn sakura", category: "decoration", themeKey: null },
+    { id: "item-neon-frame", name: "Viền neon", image: "💠", price: 140, effect: "Trang trí dashboard", category: "dashboard-decoration", themeKey: null },
+    { id: "item-sakura-wall", name: "Tường hoa sakura", image: "🌸", price: 210, effect: "Trang trí dashboard", category: "dashboard-decoration", themeKey: null },
+    { id: "item-garden-lamp", name: "Đèn lối đi vườn", image: "🏮", price: 160, effect: "Trang trí khu vườn", category: "garden-decoration", themeKey: null },
+    { id: "item-garden-fountain", name: "Đài phun nước mini", image: "⛲", price: 260, effect: "Trang trí khu vườn", category: "garden-decoration", themeKey: null },
   ],
   courseSubmissions: [],
   createCourseFee: 150,
@@ -370,7 +372,7 @@ function ensureConfig(config?: Partial<DBConfig>): DBConfig {
         : [config?.auditorScenario ?? defaultConfig.auditorScenario, ...(defaultConfig.auditorScenarios ?? [])],
     shopItems: (config?.shopItems ?? defaultConfig.shopItems).map((item) => ({
       ...item,
-      category: item.category ?? "decoration",
+      category: item.category ?? "dashboard-decoration",
       themeKey: item.themeKey ?? null,
     })),
     courseSubmissions: config?.courseSubmissions ?? [],

@@ -66,7 +66,7 @@ type ShopItem = {
   image: string;
   price: number;
   effect: string;
-  category?: "dashboard-theme" | "decoration";
+  category?: "dashboard-theme" | "dashboard-decoration" | "garden-decoration";
   themeKey?: string | null;
 };
 type CourseSubmission = {
@@ -180,7 +180,9 @@ export default function WorkspacePage() {
   const [shopItemName, setShopItemName] = useState("");
   const [shopItemImage, setShopItemImage] = useState("🌱");
   const [shopItemPrice, setShopItemPrice] = useState(80);
-  const [shopItemEffect, setShopItemEffect] = useState("");
+  const [shopItemEffect, setShopItemEffect] = useState("Trang trí dashboard");
+  const [shopItemCategory, setShopItemCategory] = useState<"dashboard-theme" | "dashboard-decoration" | "garden-decoration">("dashboard-decoration");
+  const [shopItemThemeKey, setShopItemThemeKey] = useState<"pink" | "ocean" | "none">("none");
   const [coursePriceDraft, setCoursePriceDraft] = useState<Record<string, number>>({});
   const [selectedSeed, setSelectedSeed] = useState<string>("seed-basic");
   const [gameActionLoading, setGameActionLoading] = useState(false);
@@ -367,6 +369,7 @@ export default function WorkspacePage() {
   const remainSec = Math.ceil(remainMs / 1000);
   const ownedDecorations = (config?.shopItems ?? []).filter((item) => (me?.ownedItemIds ?? []).includes(item.id));
   const ownedThemes = ownedDecorations.filter((item) => item.category === "dashboard-theme" && item.themeKey);
+  const ownedGardenDecorations = ownedDecorations.filter((item) => item.category === "garden-decoration");
   const activeTheme = me?.activeDashboardTheme ?? null;
 
   const submitPromptMaster = async () => {
@@ -900,7 +903,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
 
               <div className="mt-4 rounded-xl border border-emerald-300/20 bg-emerald-500/10 p-4">
                 <h3 className="text-lg font-semibold text-emerald-200">Cửa hàng Dashboard</h3>
-                <p className="mt-1 text-xs text-slate-300">Mua vật phẩm để trang trí dashboard hoặc dùng cho khu vườn.</p>
+                <p className="mt-1 text-xs text-slate-300">Mua vật phẩm để trang trí dashboard hoặc cho khu vườn.</p>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   {config?.shopItems.map((item) => (
                     <div key={item.id} className="rounded-lg border border-white/10 bg-slate-900/70 p-3 text-sm">
@@ -918,11 +921,25 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 <h3 className="text-lg font-semibold text-cyan-200">Vật phẩm trang trí đang sở hữu</h3>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {ownedDecorations.length ? ownedDecorations.map((item) => (
-                    <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-3 py-1 text-xs">
-                      {item.image} {item.name}
+                    <span key={item.id} className="inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-slate-900/70 px-3 py-1 text-xs">
+                      <span>{item.image} {item.name}</span>
+                      <button
+                        onClick={async () => {
+                          const data = await runGameAction({ action: "sell_item", itemId: item.id });
+                          const refund = (data as { refund?: number }).refund ?? 0;
+                          setShopMsg(`Đã bán ${item.name} và nhận lại ${refund} coin.`);
+                        }}
+                        className="rounded border border-rose-300/40 px-1 text-rose-300"
+                        title="Bán lại vật phẩm"
+                      >
+                        x
+                      </button>
                     </span>
                   )) : <p className="text-xs text-slate-300">Bạn chưa có vật phẩm trang trí nào.</p>}
                 </div>
+                {ownedGardenDecorations.length ? (
+                  <p className="mt-3 text-xs text-emerald-200">Trang trí vườn đang sở hữu: {ownedGardenDecorations.map((item)=>`${item.image} ${item.name}`).join(" • ")}</p>
+                ) : null}
                 {ownedThemes.length ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {ownedThemes.map((theme) => (
@@ -1158,6 +1175,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <button onClick={async ()=>{ try { const picked = SEED_OPTIONS.find((seed)=>seed.id===selectedSeed); await runGameAction({ action: "plant_seed", seedType: selectedSeed }); setGardenMsg(`Đã gieo ${picked?.name ?? "hạt giống"}.`); playUiSound(620);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi gieo hạt.");}}} disabled={gameActionLoading} className="rounded-lg border border-emerald-300/40 px-3 py-2 text-xs text-emerald-200 disabled:opacity-50">Gieo hạt đã chọn</button>
                   <button onClick={async ()=>{ try { await runGameAction({ action: "water_plot" }); setGardenMsg("Đã tưới cây, giảm 1 giờ trưởng thành."); playUiSound(650);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi tưới cây.");}}} disabled={gameActionLoading} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200 disabled:opacity-50">Tưới cây</button>
                   <button onClick={async ()=>{ try { const data = await runGameAction({ action: "harvest_plot" }); setGardenMsg(`Thu hoạch thành công +${(data as { coinReward?: number }).coinReward ?? 0} coin`); setHarvestFxActive(true); setTimeout(()=>setHarvestFxActive(false), 1400); playUiSound(780);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi thu hoạch.");}}} disabled={gameActionLoading} className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs text-amber-200 disabled:opacity-50">Thu hoạch</button>
+                  <button onClick={async ()=>{ try { await runGameAction({ action: "abandon_plot" }); setGardenMsg("Đã bỏ cây đang trồng."); } catch(e){ setGardenMsg(e instanceof Error ? e.message : "Không bỏ cây được."); }} } disabled={gameActionLoading} className="rounded-lg border border-rose-300/40 px-3 py-2 text-xs text-rose-200 disabled:opacity-50">Bỏ cây</button>
                 </div>
               </div>
               {gardenMsg ? <p className="mt-2 text-xs text-emerald-200">{gardenMsg}</p> : null}
@@ -1306,13 +1324,30 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               </div>
 
               <h3 className="mt-4 font-semibold text-amber-200">Shop - thêm vật phẩm bán</h3>
+              <p className="mt-1 text-xs text-slate-300">Phần công dụng chọn từ danh sách có sẵn.</p>
               <div className="mt-2 grid gap-2 md:grid-cols-2">
                 <input value={shopItemName} onChange={(e)=>setShopItemName(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên vật phẩm"/>
                 <input value={shopItemImage} onChange={(e)=>setShopItemImage(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Emoji/URL hình"/>
                 <input type="number" value={shopItemPrice} onChange={(e)=>setShopItemPrice(Number(e.target.value))} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Giá"/>
-                <input value={shopItemEffect} onChange={(e)=>setShopItemEffect(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Công dụng"/>
+                <select value={shopItemEffect} onChange={(e)=>setShopItemEffect(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2">
+                  <option>Trang trí dashboard</option>
+                  <option>Trang trí khu vườn</option>
+                  <option>Đổi dashboard sang chủ đề hồng</option>
+                  <option>Đổi dashboard sang chủ đề đại dương</option>
+                </select>
+                <select value={shopItemCategory} onChange={(e)=>setShopItemCategory(e.target.value as "dashboard-theme" | "dashboard-decoration" | "garden-decoration")} className="rounded-lg border border-white/15 bg-slate-800 p-2">
+                  <option value="dashboard-decoration">Dashboard decoration</option>
+                  <option value="garden-decoration">Garden decoration</option>
+                  <option value="dashboard-theme">Dashboard theme</option>
+                </select>
+                {shopItemCategory === "dashboard-theme" ? (
+                  <select value={shopItemThemeKey} onChange={(e)=>setShopItemThemeKey(e.target.value as "pink" | "ocean" | "none")} className="rounded-lg border border-white/15 bg-slate-800 p-2">
+                    <option value="pink">pink</option>
+                    <option value="ocean">ocean</option>
+                  </select>
+                ) : <div />}
               </div>
-              <button onClick={async ()=>{ await patchConfig({ addShopItem: { name: shopItemName, image: shopItemImage, price: shopItemPrice, effect: shopItemEffect } }); setAdminMsg("Đã thêm vật phẩm shop."); setShopItemName(""); setShopItemImage("🌱"); setShopItemPrice(80); setShopItemEffect(""); }} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm vật phẩm shop</button>
+              <button onClick={async ()=>{ await patchConfig({ addShopItem: { name: shopItemName, image: shopItemImage, price: shopItemPrice, effect: shopItemEffect, category: shopItemCategory, themeKey: shopItemCategory === "dashboard-theme" ? shopItemThemeKey : null } }); setAdminMsg("Đã thêm vật phẩm shop."); setShopItemName(""); setShopItemImage("🌱"); setShopItemPrice(80); setShopItemEffect("Trang trí dashboard"); setShopItemCategory("dashboard-decoration"); setShopItemThemeKey("none"); }} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm vật phẩm shop</button>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <button onClick={async ()=>{ await patchConfig({ grantCoins: { amount: 1000 } }); setAdminMsg("Đã cộng +1000 coin."); }} className="rounded-lg bg-amber-300 px-3 py-2 text-sm font-semibold text-slate-950">+1000 coin</button>

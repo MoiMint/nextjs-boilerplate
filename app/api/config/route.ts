@@ -49,7 +49,14 @@ export async function PATCH(request: NextRequest) {
       samplePrompt: string;
       price: number;
     };
-    addShopItem?: { name: string; image: string; price: number; effect: string };
+    addShopItem?: {
+      name: string;
+      image: string;
+      price: number;
+      effect: string;
+      category?: "dashboard-theme" | "dashboard-decoration" | "garden-decoration";
+      themeKey?: string | null;
+    };
     createCourseSubmission?: {
       title: string;
       topic: string;
@@ -142,6 +149,8 @@ export async function PATCH(request: NextRequest) {
       image: body.addShopItem.image,
       price: Math.max(1, Number(body.addShopItem.price)),
       effect: body.addShopItem.effect,
+      category: body.addShopItem.category ?? "dashboard-decoration",
+      themeKey: body.addShopItem.themeKey ?? null,
     });
   }
 

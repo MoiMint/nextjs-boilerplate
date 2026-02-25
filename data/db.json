@@ -126,17 +126,35 @@
         "name": "Viền neon",
         "image": "💠",
         "price": 140,
-        "effect": "Thêm viền phát sáng cho dashboard",
-        "category": "decoration",
+        "effect": "Trang trí dashboard",
+        "category": "dashboard-decoration",
         "themeKey": null
       },
       {
-        "id": "item-sakura-lantern",
-        "name": "Đèn sakura",
+        "id": "item-sakura-wall",
+        "name": "Tường hoa sakura",
+        "image": "🌸",
+        "price": 210,
+        "effect": "Trang trí dashboard",
+        "category": "dashboard-decoration",
+        "themeKey": null
+      },
+      {
+        "id": "item-garden-lamp",
+        "name": "Đèn lối đi vườn",
         "image": "🏮",
-        "price": 200,
-        "effect": "Trang trí góc dashboard bằng đèn sakura",
-        "category": "decoration",
+        "price": 160,
+        "effect": "Trang trí khu vườn",
+        "category": "garden-decoration",
+        "themeKey": null
+      },
+      {
+        "id": "item-garden-fountain",
+        "name": "Đài phun nước mini",
+        "image": "⛲",
+        "price": 260,
+        "effect": "Trang trí khu vườn",
+        "category": "garden-decoration",
         "themeKey": null
       }
     ],
