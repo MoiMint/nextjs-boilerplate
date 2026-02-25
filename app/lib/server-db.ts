@@ -242,6 +242,7 @@ const defaultConfig: DBConfig = {
     { id: "item-neon-frame", name: "Viền neon", image: "💠", price: 140, effect: "Trang trí dashboard", category: "dashboard-decoration", themeKey: null },
     { id: "item-sakura-wall", name: "Tường hoa sakura", image: "🌸", price: 210, effect: "Trang trí dashboard", category: "dashboard-decoration", themeKey: null },
     { id: "item-garden-lamp", name: "Đèn lối đi vườn", image: "🏮", price: 160, effect: "Trang trí khu vườn", category: "garden-decoration", themeKey: null },
+    { id: "item-garden-lantern", name: "Đèn lồng lễ hội", image: "🏮", price: 190, effect: "Trang trí khu vườn", category: "garden-decoration", themeKey: null },
     { id: "item-garden-fountain", name: "Đài phun nước mini", image: "⛲", price: 260, effect: "Trang trí khu vườn", category: "garden-decoration", themeKey: null },
   ],
   courseSubmissions: [],

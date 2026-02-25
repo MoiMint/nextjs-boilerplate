@@ -466,6 +466,14 @@ export default function WorkspacePage() {
       : activeTheme === "violet"
         ? "border-violet-300/40 bg-violet-900/30"
         : "border-white/10 bg-slate-900";
+  const appThemeClass = activeTheme === "pink"
+    ? "from-pink-500/10 via-rose-500/10 to-slate-950"
+    : activeTheme === "ocean"
+      ? "from-cyan-500/10 via-blue-500/10 to-slate-950"
+      : activeTheme === "violet"
+        ? "from-violet-500/10 via-fuchsia-500/10 to-slate-950"
+        : "from-slate-900 via-slate-900 to-slate-950";
+  const ownedGardenVisual = ownedGardenDecorations.map((item) => item.image).join(" ");
 
 
   const submitPromptMaster = async () => {
@@ -937,9 +945,9 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
   }, [config, selectedLessonId]);
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 md:px-8 md:py-8">
+    <main className={`min-h-screen bg-gradient-to-br px-4 py-6 text-slate-100 md:px-8 md:py-8 ${appThemeClass}`}>
       <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[260px_1fr]">
-        <aside className="rounded-2xl border border-white/10 bg-slate-900 p-4">
+        <aside className={`rounded-2xl border p-4 ${themeClass}`}>
           <h1 className="text-lg font-bold">{me?.name ?? "Loading..."}</h1>
           <p className="text-sm text-slate-300">{me?.email}</p>
           <p className="mt-1 text-xs text-cyan-300">Chuỗi đăng nhập: {me?.loginStreak ?? 0} ngày</p>
@@ -973,7 +981,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           </button>
         </aside>
 
-        <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-900/50 p-4 scrollbar-pro max-h-[84vh] overflow-y-auto">
+        <section className={`space-y-4 rounded-2xl border p-4 scrollbar-pro max-h-[84vh] overflow-y-auto ${themeClass}`}>
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Điểm trung bình</p><p className="text-2xl font-bold">{avgScore}%</p></div>
             <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Số ngày đăng nhập</p><p className="text-2xl font-bold">{me?.totalLoginDays ?? 0}</p></div>
@@ -1266,6 +1274,9 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <p className="mt-1 text-[11px] text-slate-300">Tiến trình: {me?.farmPlot?.seedType ? `${Math.min(100, Math.max(0, 100 - Math.floor((remainSec / ((SEED_OPTIONS.find((seed) => seed.id === me?.farmPlot?.seedType)?.growHours ?? 1) * 3600)) * 100)))}%` : "0%"}</p>
                 </div>
                 <div className="mt-2 text-4xl">{remainSec <= 0 && me?.farmPlot?.seedType ? "🌸" : me?.farmPlot?.seedType ? "🌱" : "🪴"}</div>
+                <div className="mt-2 rounded-lg border border-emerald-300/20 bg-emerald-900/20 p-2 text-xs text-emerald-200">
+                  Trang trí vườn: {ownedGardenVisual || "(chưa có)"}
+                </div>
                 <div className="mt-3 grid gap-2 md:grid-cols-3">
                   {SEED_OPTIONS.map((seed) => (
                     <button key={seed.id} onClick={() => setSelectedSeed(seed.id)} className={`rounded-lg border px-3 py-2 text-left text-xs ${selectedSeed === seed.id ? "border-emerald-300/60 bg-emerald-500/20" : "border-white/15 bg-slate-800"}`}>

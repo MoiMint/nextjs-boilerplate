@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
     const coinReward = seed?.reward ?? 100;
     user.coins += coinReward;
 
-    const decoDropMap = ["item-garden-lamp", "item-garden-fountain", "item-neon-frame"];
+    const decoDropMap = ["item-garden-lamp", "item-garden-lantern", "item-garden-fountain", "item-neon-frame"];
     const droppedItem = Math.random() > 0.7 ? decoDropMap[Math.floor(Math.random() * decoDropMap.length)] : null;
     if (droppedItem && !user.ownedItemIds.includes(droppedItem)) user.ownedItemIds.push(droppedItem);
 
