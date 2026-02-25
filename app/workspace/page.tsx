@@ -457,6 +457,7 @@ export default function WorkspacePage() {
   const ownedThemes = ownedDecorations.filter((item) => item.category === "dashboard-theme" && item.themeKey);
   const ownedDashboardDecorations = ownedDecorations.filter((item) => item.category === "dashboard-decoration");
   const ownedGardenDecorations = ownedDecorations.filter((item) => item.category === "garden-decoration");
+  const hasNeonFrame = (me?.ownedItemIds ?? []).includes("item-neon-frame");
   const activeTheme = me?.activeDashboardTheme ?? null;
 
   const themeClass = activeTheme === "pink"
@@ -474,6 +475,8 @@ export default function WorkspacePage() {
         ? "from-violet-500/10 via-fuchsia-500/10 to-slate-950"
         : "from-slate-900 via-slate-900 to-slate-950";
   const ownedGardenVisual = ownedGardenDecorations.map((item) => item.image).join(" ");
+  const dashboardDecorVisual = ownedDashboardDecorations.map((item) => item.image).join(" ");
+  const panelClass = `tab-panel rounded-2xl border p-5 ${themeClass} ${hasNeonFrame ? "neon-frame" : ""}`;
 
 
   const submitPromptMaster = async () => {
@@ -962,7 +965,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 key={key}
                 onClick={() => { playUiSound(480); setActiveTab(key); }}
                 className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-all duration-300 ${
-                  activeTab === key ? "bg-cyan-400 text-slate-950" : "bg-white/5"
+                  activeTab === key ? "bg-cyan-400 text-slate-950" : hasNeonFrame ? "bg-white/5 neon-chip" : "bg-white/5"
                 }`}
               >
                 {TAB_LABELS[locale][key]}
@@ -993,8 +996,9 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           </div>
 
           {activeTab === "dashboard" && (
-            <div className={`tab-panel rounded-2xl border p-5 ${themeClass}`}>
+            <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
+              {dashboardDecorVisual ? <p className="mt-1 text-xs text-cyan-200">✨ Trang trí: {dashboardDecorVisual}</p> : null}
               <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
@@ -1071,8 +1075,9 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "promptmaster" && config && (
-            <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Prompt Master - Nhiều khóa học</h2>
+              {dashboardDecorVisual ? <p className="mt-1 text-xs text-cyan-200">✨ Trang trí: {dashboardDecorVisual}</p> : null}
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {config.promptMasterLessons.map((lesson) => (
                   <div key={lesson.id} className={`relative rounded-lg border p-3 ${selectedLesson?.id===lesson.id?'border-cyan-300 bg-cyan-500/10':'border-white/10 bg-slate-800/70'}`}>
@@ -1222,8 +1227,9 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "arena" && config && (
-            <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Clean Prompt Arena - Chủ đề tuần</h2>
+              {dashboardDecorVisual ? <p className="mt-1 text-xs text-cyan-200">✨ Trang trí: {dashboardDecorVisual}</p> : null}
               <p className="mt-2 text-sm text-slate-300">{config.arenaWeekly.weekLabel}: {config.arenaWeekly.title}</p>
               <p className="mt-2 rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">Input: {config.arenaWeekly.inputText}</p>
               <textarea value={arenaPrompt} onChange={(e)=>setArenaPrompt(e.target.value)} className="mt-3 h-20 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Prompt của bạn"/>
@@ -1243,9 +1249,10 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "auditor" && config && (
-            <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className={panelClass}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold text-cyan-200">AI Auditor</h2>
+                {dashboardDecorVisual ? <p className="mt-1 text-xs text-cyan-200">✨ Trang trí: {dashboardDecorVisual}</p> : null}
                 <button onClick={randomizeAuditorScenario} className="rounded-lg border border-cyan-300/50 px-3 py-2 text-sm text-cyan-200">Làm mới đề ngẫu nhiên</button>
               </div>
               <p className="mt-2 text-sm text-cyan-100">Đề hiện tại: {(activeAuditorScenario ?? config.auditorScenario).title}</p>
@@ -1260,8 +1267,9 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
 
 
           {activeTab === "garden" && (
-            <div className="tab-panel rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-5">
+            <div className={panelClass}>
               <h2 className="text-xl font-semibold text-emerald-200">Trồng cây</h2>
+              {dashboardDecorVisual ? <p className="mt-1 text-xs text-cyan-200">✨ Dashboard decor: {dashboardDecorVisual}</p> : null}
               <p className="mt-1 text-sm text-slate-300">Mảnh đất của bạn dùng Endless Coin để mua hạt giống, gieo, tưới và thu hoạch.</p>
 
               <div className="mt-3 rounded-xl border border-white/10 bg-slate-900/70 p-4">
@@ -1298,8 +1306,9 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "history" && (
-            <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Lịch sử cá nhân</h2>
+              {dashboardDecorVisual ? <p className="mt-1 text-xs text-cyan-200">✨ Trang trí: {dashboardDecorVisual}</p> : null}
               <div className="mt-3 space-y-2">
                 {histories.map((item) => (
                   <div key={item.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
@@ -1312,9 +1321,10 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "community" && (
-            <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className={panelClass}>
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold text-cyan-200">Chat cộng đồng</h2>
+                {dashboardDecorVisual ? <p className="mt-1 text-xs text-cyan-200">✨ Trang trí: {dashboardDecorVisual}</p> : null}
                 <button
                   onClick={refreshCommunity}
                   className="rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200"
@@ -1397,8 +1407,9 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "admin" && me?.isAdmin && (
-            <div className="tab-panel rounded-2xl border border-amber-300/20 bg-amber-400/10 p-5">
+            <div className={panelClass}>
               <h2 className="text-xl font-semibold text-amber-200">Admin Control</h2>
+              {dashboardDecorVisual ? <p className="mt-1 text-xs text-cyan-200">✨ Trang trí: {dashboardDecorVisual}</p> : null}
 
               <div className="mt-3 grid gap-2 md:grid-cols-3">
                 <input value={adminName} onChange={(e)=>setAdminName(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên admin"/>
