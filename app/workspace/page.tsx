@@ -55,6 +55,8 @@ type CourseSubmission = {
   status: "pending";
 };
 
+type SeedSpec = { id: string; name: string; price: number; reward: number; growHours: number };
+
 type ArenaWeekly = {
   weekLabel: string;
   title: string;
@@ -79,6 +81,11 @@ type AppConfig = {
 };
 
 const SESSION_TOKEN_KEY = "blabla-session-token";
+const SEED_OPTIONS: SeedSpec[] = [
+  { id: "seed-basic", name: "Hạt cải", price: 50, reward: 150, growHours: 8 },
+  { id: "seed-sun", name: "Hạt hướng dương", price: 120, reward: 380, growHours: 12 },
+  { id: "seed-moon", name: "Hạt ánh trăng", price: 240, reward: 820, growHours: 20 },
+];
 
 export default function WorkspacePage() {
   const router = useRouter();
@@ -151,6 +158,10 @@ export default function WorkspacePage() {
   const [shopItemPrice, setShopItemPrice] = useState(80);
   const [shopItemEffect, setShopItemEffect] = useState("");
   const [coursePriceDraft, setCoursePriceDraft] = useState<Record<string, number>>({});
+  const [selectedSeed, setSelectedSeed] = useState<string>("seed-basic");
+  const [gameActionLoading, setGameActionLoading] = useState(false);
+  const [lessonMenuId, setLessonMenuId] = useState<string>("");
+  const [lessonEditDraft, setLessonEditDraft] = useState<PromptMasterLesson | null>(null);
 
   const token = typeof window !== "undefined" ? localStorage.getItem(SESSION_TOKEN_KEY) : null;
   const authHeaders = useMemo(
@@ -328,6 +339,7 @@ export default function WorkspacePage() {
   const readyAt = me?.farmPlot?.readyAt ? new Date(me.farmPlot.readyAt).getTime() : 0;
   const remainMs = readyAt ? Math.max(0, readyAt - nowTick) : 0;
   const remainSec = Math.ceil(remainMs / 1000);
+  const ownedDecorations = (config?.shopItems ?? []).filter((item) => (me?.ownedItemIds ?? []).includes(item.id));
 
   const submitPromptMaster = async () => {
     if (!selectedLesson) return;
@@ -647,16 +659,21 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
   };
 
   const runGameAction = async (payload: Record<string, unknown>) => {
-    const res = await fetch("/api/game", {
-      method: "POST",
-      headers: authHeaders,
-      body: JSON.stringify(payload),
-    });
-    const data = (await res.json()) as { error?: string; coinReward?: number };
-    if (!res.ok) throw new Error(data.error ?? "Không thực hiện được hành động.");
-    await loadMe();
-    await loadConfig();
-    return data;
+    setGameActionLoading(true);
+    try {
+      const res = await fetch("/api/game", {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json()) as { error?: string; coinReward?: number };
+      if (!res.ok) throw new Error(data.error ?? "Không thực hiện được hành động.");
+      await loadMe();
+      await loadConfig();
+      return data;
+    } finally {
+      setGameActionLoading(false);
+    }
   };
 
   const buyLesson = async (lessonId: string) => {
@@ -707,6 +724,31 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
   };
 
   const unlockable = (lesson: PromptMasterLesson) => (lesson.price ?? 0) > 0 && !(me?.unlockedLessonIds ?? []).includes(lesson.id);
+
+  const openLessonEditor = (lesson: PromptMasterLesson) => {
+    setLessonMenuId(lesson.id);
+    setLessonEditDraft({ ...lesson });
+  };
+
+  const saveLessonEditor = async () => {
+    if (!lessonEditDraft) return;
+    await patchConfig({
+      updateLesson: {
+        lessonId: lessonEditDraft.id,
+        title: lessonEditDraft.title,
+        topic: lessonEditDraft.topic,
+        situation: lessonEditDraft.situation,
+        overview: lessonEditDraft.overview,
+        methodGuide: lessonEditDraft.methodGuide,
+        practiceChallenge: lessonEditDraft.practiceChallenge,
+        samplePrompt: lessonEditDraft.samplePrompt,
+        price: lessonEditDraft.price ?? 0,
+      },
+    });
+    setShopMsg("Đã cập nhật bài học.");
+    setLessonMenuId("");
+    setLessonEditDraft(null);
+  };
 
   useEffect(() => {
     if (!config || !selectedLessonId) return;
@@ -789,9 +831,20 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                       <p className="font-semibold">{item.name}</p>
                       <p className="text-xs text-slate-300">{item.effect}</p>
                       <p className="mt-1 text-xs text-amber-300">{item.price} Coin</p>
-                      <button onClick={() => void buyItem(item.id)} className="mt-2 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-200">Mua</button>
+                      <button onClick={() => void buyItem(item.id)} disabled={gameActionLoading} className="mt-2 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-200 disabled:opacity-50">Mua</button>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-500/10 p-4">
+                <h3 className="text-lg font-semibold text-cyan-200">Vật phẩm trang trí đang sở hữu</h3>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {ownedDecorations.length ? ownedDecorations.map((item) => (
+                    <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-3 py-1 text-xs">
+                      {item.image} {item.name}
+                    </span>
+                  )) : <p className="text-xs text-slate-300">Bạn chưa có vật phẩm trang trí nào.</p>}
                 </div>
               </div>
             </div>
@@ -805,17 +858,11 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <div key={lesson.id} className={`relative rounded-lg border p-3 ${selectedLesson?.id===lesson.id?'border-cyan-300 bg-cyan-500/10':'border-white/10 bg-slate-800/70'}`}>
                     {me?.isAdmin ? (
                       <button
-                        onClick={async () => {
-                          if (!window.confirm("Bạn chắc chưa? Xóa bài học này sẽ không thể hoàn tác.")) return;
-                          await patchConfig({ deleteLessonId: lesson.id });
-                          setSelectedLessonId("");
-                          setShopMsg("Đã xóa bài học.");
-                          playUiSound(330);
-                        }}
-                        className="absolute right-2 top-2 rounded-full border border-rose-300/40 px-2 text-xs text-rose-300"
-                        title="Xóa bài học"
+                        onClick={() => openLessonEditor(lesson)}
+                        className="absolute right-2 top-2 rounded-full border border-white/30 px-2 text-xs text-slate-200"
+                        title="Tùy chọn"
                       >
-                        ✕
+                        ...
                       </button>
                     ) : null}
                     <button onClick={() => setSelectedLessonId(lesson.id)} className="w-full text-left">
@@ -824,7 +871,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                       {(lesson.price ?? 0) > 0 ? <p className="mt-1 text-xs text-amber-300">Giá: {lesson.price} Endless Coin</p> : null}
                     </button>
                     {unlockable(lesson) ? (
-                      <button onClick={() => void buyLesson(lesson.id)} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-2 text-xs text-amber-200">
+                      <button onClick={() => void buyLesson(lesson.id)} disabled={gameActionLoading} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-2 text-xs text-amber-200 disabled:opacity-50">
                         {(lesson.price ?? 0)} Coin
                       </button>
                     ) : (
@@ -848,6 +895,26 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 ))}
               </div>
               {shopMsg ? <p className="mt-2 text-xs text-amber-200">{shopMsg}</p> : null}
+              {lessonMenuId && lessonEditDraft ? (
+                <div className="mt-3 rounded-lg border border-white/15 bg-slate-950/90 p-3 text-xs">
+                  <p className="font-semibold text-cyan-200">Chỉnh sửa khóa học (admin)</p>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    <input value={lessonEditDraft.title} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, title: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên khóa"/>
+                    <input value={lessonEditDraft.topic} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, topic: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Chủ đề"/>
+                    <input value={lessonEditDraft.situation} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, situation: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Thực trạng"/>
+                    <input value={lessonEditDraft.overview} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, overview: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Tóm tắt"/>
+                    <input value={lessonEditDraft.methodGuide} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, methodGuide: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Phương pháp"/>
+                    <input value={lessonEditDraft.practiceChallenge} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, practiceChallenge: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Bài thực hành"/>
+                    <input value={lessonEditDraft.samplePrompt} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, samplePrompt: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Prompt mẫu"/>
+                    <input type="number" value={lessonEditDraft.price ?? 0} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, price: Number(e.target.value) })} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Giá coin"/>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button onClick={saveLessonEditor} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-cyan-200">Lưu</button>
+                    <button onClick={async ()=>{ if (!window.confirm("Bạn chắc chưa? Xóa bài học này sẽ không thể hoàn tác.")) return; await patchConfig({ deleteLessonId: lessonMenuId }); setLessonMenuId(""); setLessonEditDraft(null); setShopMsg("Đã xóa bài học."); }} className="rounded-lg border border-rose-300/40 px-3 py-2 text-rose-300">Xóa</button>
+                    <button onClick={()=>{ setLessonMenuId(""); setLessonEditDraft(null); }} className="rounded-lg border border-white/20 px-3 py-2">Đóng</button>
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-4 rounded-lg border border-white/10 bg-slate-900/60 p-3">
                 <p className="text-sm font-semibold text-cyan-200">Tạo khoá học cộng đồng (phí {config.createCourseFee} coin)</p>
                 <div className="mt-2 grid gap-2 md:grid-cols-2">
@@ -982,10 +1049,18 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               <div className="mt-3 rounded-xl border border-white/10 bg-slate-900/70 p-4">
                 <p className="text-sm">🌾 Mảnh đất: {me?.farmPlot?.seedType ? `Đang trồng (${me.farmPlot.seedType})` : "Trống"}</p>
                 <p className="text-xs text-slate-400">Sẵn sàng thu hoạch: {me?.farmPlot?.readyAt ? `${new Date(me.farmPlot.readyAt).toLocaleTimeString("vi-VN")} (${remainSec}s)` : "-"}</p>
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  {SEED_OPTIONS.map((seed) => (
+                    <button key={seed.id} onClick={() => setSelectedSeed(seed.id)} className={`rounded-lg border px-3 py-2 text-left text-xs ${selectedSeed === seed.id ? "border-emerald-300/60 bg-emerald-500/20" : "border-white/15 bg-slate-800"}`}>
+                      <p className="font-semibold">{seed.name}</p>
+                      <p className="text-slate-300">Giá {seed.price} → {seed.reward} coin / {seed.growHours}h</p>
+                    </button>
+                  ))}
+                </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button onClick={async ()=>{ try { await runGameAction({ action: "plant_seed" }); setGardenMsg("Đã gieo hạt giống."); playUiSound(620);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi gieo hạt.");}}} className="rounded-lg border border-emerald-300/40 px-3 py-2 text-xs text-emerald-200">Gieo hạt (80 coin)</button>
-                  <button onClick={async ()=>{ try { await runGameAction({ action: "water_plot" }); setGardenMsg("Đã tưới cây."); playUiSound(650);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi tưới cây.");}}} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200">Tưới cây</button>
-                  <button onClick={async ()=>{ try { const data = await runGameAction({ action: "harvest_plot" }); setGardenMsg(`Thu hoạch thành công +${(data as { coinReward?: number }).coinReward ?? 0} coin`); playUiSound(780);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi thu hoạch.");}}} className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs text-amber-200">Thu hoạch</button>
+                  <button onClick={async ()=>{ try { const picked = SEED_OPTIONS.find((seed)=>seed.id===selectedSeed); await runGameAction({ action: "plant_seed", seedType: selectedSeed }); setGardenMsg(`Đã gieo ${picked?.name ?? "hạt giống"}.`); playUiSound(620);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi gieo hạt.");}}} disabled={gameActionLoading} className="rounded-lg border border-emerald-300/40 px-3 py-2 text-xs text-emerald-200 disabled:opacity-50">Gieo hạt đã chọn</button>
+                  <button onClick={async ()=>{ try { await runGameAction({ action: "water_plot" }); setGardenMsg("Đã tưới cây, giảm 1 giờ trưởng thành."); playUiSound(650);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi tưới cây.");}}} disabled={gameActionLoading} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200 disabled:opacity-50">Tưới cây</button>
+                  <button onClick={async ()=>{ try { const data = await runGameAction({ action: "harvest_plot" }); setGardenMsg(`Thu hoạch thành công +${(data as { coinReward?: number }).coinReward ?? 0} coin`); playUiSound(780);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi thu hoạch.");}}} disabled={gameActionLoading} className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs text-amber-200 disabled:opacity-50">Thu hoạch</button>
                 </div>
               </div>
               {gardenMsg ? <p className="mt-2 text-xs text-emerald-200">{gardenMsg}</p> : null}
@@ -1098,19 +1173,6 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               <div className="mt-2 flex items-center gap-2">
                 <input type="number" value={coursePriceDraft["new"] ?? 0} onChange={(e)=>setCoursePriceDraft((prev)=>({ ...prev, new: Number(e.target.value) }))} className="w-40 rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Giá coin"/>
                 <button onClick={addPromptLesson} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm khóa Prompt Master</button>
-              </div>
-
-              <h3 className="mt-4 font-semibold text-amber-200">Đặt giá / duyệt khoá học</h3>
-              <div className="mt-2 space-y-2">
-                {config?.promptMasterLessons.map((lesson) => (
-                  <div key={lesson.id} className="rounded-lg border border-white/10 bg-slate-900/60 p-3 text-xs">
-                    <p>{lesson.title}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <input type="number" value={coursePriceDraft[lesson.id] ?? lesson.price ?? 0} onChange={(e)=>setCoursePriceDraft((prev)=>({ ...prev, [lesson.id]: Number(e.target.value) }))} className="w-28 rounded-md border border-white/15 bg-slate-800 p-1"/>
-                      <button onClick={async ()=>{ await patchConfig({ setLessonPrice: { lessonId: lesson.id, price: coursePriceDraft[lesson.id] ?? lesson.price ?? 0 } }); setAdminMsg("Đã cập nhật giá khóa học."); }} className="rounded-md border border-cyan-300/40 px-2 py-1 text-cyan-200">Lưu giá</button>
-                    </div>
-                  </div>
-                ))}
               </div>
 
               <h3 className="mt-4 font-semibold text-amber-200">Duyệt khóa học người dùng gửi</h3>

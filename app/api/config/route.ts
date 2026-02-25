@@ -38,6 +38,17 @@ export async function PATCH(request: NextRequest) {
     arenaWeekly?: { weekLabel: string; title: string; inputText: string; goldenResponse: string };
     deleteLessonId?: string;
     setLessonPrice?: { lessonId: string; price: number };
+    updateLesson?: {
+      lessonId: string;
+      title: string;
+      topic: string;
+      situation: string;
+      overview: string;
+      methodGuide: string;
+      practiceChallenge: string;
+      samplePrompt: string;
+      price: number;
+    };
     addShopItem?: { name: string; image: string; price: number; effect: string };
     createCourseSubmission?: {
       title: string;
@@ -108,6 +119,20 @@ export async function PATCH(request: NextRequest) {
   if (body.setLessonPrice) {
     const lesson = db.config.promptMasterLessons.find((item) => item.id === body.setLessonPrice?.lessonId);
     if (lesson) lesson.price = Math.max(0, Number(body.setLessonPrice.price ?? 0));
+  }
+
+  if (body.updateLesson) {
+    const lesson = db.config.promptMasterLessons.find((item) => item.id === body.updateLesson?.lessonId);
+    if (lesson) {
+      lesson.title = body.updateLesson.title;
+      lesson.topic = body.updateLesson.topic;
+      lesson.situation = body.updateLesson.situation;
+      lesson.overview = body.updateLesson.overview;
+      lesson.methodGuide = body.updateLesson.methodGuide;
+      lesson.practiceChallenge = body.updateLesson.practiceChallenge;
+      lesson.samplePrompt = body.updateLesson.samplePrompt;
+      lesson.price = Math.max(0, Number(body.updateLesson.price ?? 0));
+    }
   }
 
   if (body.addShopItem) {

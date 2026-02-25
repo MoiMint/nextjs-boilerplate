@@ -225,8 +225,10 @@ const defaultConfig: DBConfig = {
     ],
   },
   shopItems: [
-    { id: "item-seed-basic", name: "Hạt giống cơ bản", image: "🌱", price: 80, effect: "Trồng cây nhận coin" },
+    { id: "item-seed-basic", name: "Hạt giống cơ bản", image: "🌱", price: 50, effect: "Trồng cây nhận coin" },
     { id: "item-water-can", name: "Bình tưới", image: "🪣", price: 120, effect: "Trang trí dashboard" },
+    { id: "item-lamp", name: "Đèn vườn", image: "🏮", price: 180, effect: "Trang trí dashboard" },
+    { id: "item-garden-statue", name: "Tượng đá", image: "🗿", price: 260, effect: "Trang trí dashboard" },
   ],
   courseSubmissions: [],
   createCourseFee: 150,

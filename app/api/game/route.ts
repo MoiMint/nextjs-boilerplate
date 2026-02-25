@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromToken, readDB, writeDB } from "@/app/lib/server-db";
 
+type SeedSpec = { id: string; name: string; price: number; reward: number; growHours: number };
+
+const SEEDS: SeedSpec[] = [
+  { id: "seed-basic", name: "Hạt cải", price: 50, reward: 150, growHours: 8 },
+  { id: "seed-sun", name: "Hạt hướng dương", price: 120, reward: 380, growHours: 12 },
+  { id: "seed-moon", name: "Hạt ánh trăng", price: 240, reward: 820, growHours: 20 },
+];
+
+function getSeed(seedType: string | null | undefined) {
+  return SEEDS.find((seed) => seed.id === seedType) ?? null;
+}
+
 export async function POST(request: NextRequest) {
   const token = request.headers.get("x-session-token");
   const me = await getUserFromToken(token);
@@ -10,6 +22,7 @@ export async function POST(request: NextRequest) {
     action?: "buy_lesson" | "buy_item" | "plant_seed" | "water_plot" | "harvest_plot";
     lessonId?: string;
     itemId?: string;
+    seedType?: string;
   };
 
   const db = await readDB();
@@ -47,21 +60,21 @@ export async function POST(request: NextRequest) {
 
   if (body.action === "plant_seed") {
     if (user.farmPlot.seedType) return NextResponse.json({ error: "Mảnh đất đang có cây." }, { status: 400 });
-    const seedItem = db.config.shopItems.find((i) => i.id === "item-seed-basic");
-    const seedPrice = seedItem?.price ?? 80;
-    if (user.coins < seedPrice) return NextResponse.json({ error: "Không đủ coin mua hạt giống." }, { status: 400 });
+    const seed = getSeed(body.seedType ?? "seed-basic");
+    if (!seed) return NextResponse.json({ error: "Loại hạt giống không hợp lệ." }, { status: 400 });
+    if (user.coins < seed.price) return NextResponse.json({ error: "Không đủ coin mua hạt giống." }, { status: 400 });
 
     const now = Date.now();
-    user.coins -= seedPrice;
+    user.coins -= seed.price;
     user.farmPlot = {
-      seedType: "basic",
+      seedType: seed.id,
       plantedAt: new Date(now).toISOString(),
       wateredAt: null,
-      readyAt: new Date(now + 60 * 1000).toISOString(),
+      readyAt: new Date(now + seed.growHours * 60 * 60 * 1000).toISOString(),
       lastHarvestAt: user.farmPlot.lastHarvestAt,
     };
     await writeDB(db);
-    return NextResponse.json({ ok: true, coins: user.coins, farmPlot: user.farmPlot });
+    return NextResponse.json({ ok: true, coins: user.coins, farmPlot: user.farmPlot, seed });
   }
 
   if (body.action === "water_plot") {
@@ -70,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
     const now = Date.now();
     const readyAt = new Date(user.farmPlot.readyAt).getTime();
-    const reduced = Math.max(now + 10 * 1000, readyAt - 15 * 1000);
+    const reduced = Math.max(now + 30 * 60 * 1000, readyAt - 60 * 60 * 1000);
     user.farmPlot.wateredAt = new Date(now).toISOString();
     user.farmPlot.readyAt = new Date(reduced).toISOString();
     await writeDB(db);
@@ -85,11 +98,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Cây chưa trưởng thành." }, { status: 400 });
     }
 
-    const coinReward = 120;
+    const seed = getSeed(user.farmPlot.seedType);
+    const coinReward = seed?.reward ?? 100;
     user.coins += coinReward;
-    if (Math.random() > 0.5) {
-      user.ownedItemIds.push("item-water-can");
-    }
+
+    const decoDropMap = ["item-water-can", "item-lamp", "item-garden-statue"];
+    const droppedItem = Math.random() > 0.7 ? decoDropMap[Math.floor(Math.random() * decoDropMap.length)] : null;
+    if (droppedItem) user.ownedItemIds.push(droppedItem);
 
     user.farmPlot = {
       seedType: null,
@@ -99,7 +114,7 @@ export async function POST(request: NextRequest) {
       lastHarvestAt: new Date().toISOString(),
     };
     await writeDB(db);
-    return NextResponse.json({ ok: true, coins: user.coins, farmPlot: user.farmPlot, coinReward });
+    return NextResponse.json({ ok: true, coins: user.coins, farmPlot: user.farmPlot, coinReward, droppedItem });
   }
 
   return NextResponse.json({ error: "Action không hợp lệ." }, { status: 400 });
