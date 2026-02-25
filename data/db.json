@@ -11,7 +11,18 @@
       "loginCount": 0,
       "totalLoginDays": 0,
       "loginStreak": 0,
-      "lastLoginDate": null
+      "lastLoginDate": null,
+      "coins": 1000,
+      "unlockedLessonIds": [],
+      "ownedItemIds": [],
+      "farmPlot": {
+        "seedType": null,
+        "plantedAt": null,
+        "wateredAt": null,
+        "readyAt": null,
+        "lastHarvestAt": null
+      },
+      "activeDashboardTheme": null
     }
   ],
   "sessions": [],
@@ -28,7 +39,11 @@
         "overview": "Bạn sẽ học cách biến vấn đề thực tế thành app dashboard theo dõi chi tiêu trực quan để kiểm soát tài chính cá nhân.",
         "methodGuide": "Áp dụng RTRI: (1) Role - giao vai trò rõ cho AI, (2) Task - nêu nhiệm vụ cụ thể, (3) Requirement - ràng buộc kỹ thuật và giao diện, (4) Iterate - thử nghiệm rồi tinh chỉnh. Quy trình: lên ý tưởng bằng ChatGPT, chuyển sang Claude Artifacts để sinh app, test dữ liệu và cải tiến.",
         "practiceChallenge": "Viết prompt để AI tạo dashboard quản lý chi tiêu có danh mục ăn uống/đi lại/học tập/giải trí/khác, hỗ trợ thêm-xóa khoản chi và hiển thị biểu đồ tổng quan.",
-        "samplePrompt": "Bạn là Senior Product Designer + Frontend Mentor. Hãy tạo web app quản lý chi tiêu học sinh bằng HTML/CSS/JS, có form nhập khoản chi, danh mục, nút xoá, tổng theo danh mục và biểu đồ cột. Output gồm: mô tả kiến trúc, mã hoàn chỉnh, checklist test nhanh."
+        "samplePrompt": "Bạn là Senior Product Designer + Frontend Mentor. Hãy tạo web app quản lý chi tiêu học sinh bằng HTML/CSS/JS, có form nhập khoản chi, danh mục, nút xoá, tổng theo danh mục và biểu đồ cột. Output gồm: mô tả kiến trúc, mã hoàn chỉnh, checklist test nhanh.",
+        "price": 0,
+        "approved": true,
+        "pendingApproval": false,
+        "createdByUserId": ""
       },
       {
         "id": "pm-2",
@@ -38,7 +53,11 @@
         "overview": "Mục tiêu của bài là tạo prompt giúp AI viết email xin lỗi chuyên nghiệp và kế hoạch xử lý rõ ràng, giữ được niềm tin khách hàng.",
         "methodGuide": "Xác định rõ giọng điệu thương hiệu, đối tượng người nhận, cấu trúc email 4 phần (xin lỗi - nguyên nhân - hành động - cam kết), thêm ràng buộc độ dài và định dạng bullet.",
         "practiceChallenge": "Viết prompt yêu cầu AI soạn email xin lỗi + 3 hành động khắc phục + ưu đãi đền bù, ngắn gọn dưới 220 từ.",
-        "samplePrompt": "Vai trò: Chuyên viên CSKH cao cấp. Nhiệm vụ: viết email xin lỗi chuyên nghiệp cho khách hàng bị giao trễ 5 ngày. Yêu cầu: giọng điệu đồng cảm, nêu 3 hành động khắc phục, kết thúc bằng ưu đãi 15%, tối đa 220 từ."
+        "samplePrompt": "Vai trò: Chuyên viên CSKH cao cấp. Nhiệm vụ: viết email xin lỗi chuyên nghiệp cho khách hàng bị giao trễ 5 ngày. Yêu cầu: giọng điệu đồng cảm, nêu 3 hành động khắc phục, kết thúc bằng ưu đãi 15%, tối đa 220 từ.",
+        "price": 0,
+        "approved": true,
+        "pendingApproval": false,
+        "createdByUserId": ""
       }
     ],
     "arenaWeekly": {
@@ -82,6 +101,46 @@
           "Cần khuyến nghị tham vấn bác sĩ trước khi thay đổi phác đồ"
         ]
       }
-    ]
+    ],
+    "shopItems": [
+      {
+        "id": "item-theme-pink",
+        "name": "Sơn hồng dashboard",
+        "image": "🎨",
+        "price": 180,
+        "effect": "Đổi dashboard sang chủ đề hồng",
+        "category": "dashboard-theme",
+        "themeKey": "pink"
+      },
+      {
+        "id": "item-theme-ocean",
+        "name": "Sơn đại dương",
+        "image": "🌊",
+        "price": 220,
+        "effect": "Đổi dashboard sang chủ đề đại dương",
+        "category": "dashboard-theme",
+        "themeKey": "ocean"
+      },
+      {
+        "id": "item-neon-frame",
+        "name": "Viền neon",
+        "image": "💠",
+        "price": 140,
+        "effect": "Thêm viền phát sáng cho dashboard",
+        "category": "decoration",
+        "themeKey": null
+      },
+      {
+        "id": "item-sakura-lantern",
+        "name": "Đèn sakura",
+        "image": "🏮",
+        "price": 200,
+        "effect": "Trang trí góc dashboard bằng đèn sakura",
+        "category": "decoration",
+        "themeKey": null
+      }
+    ],
+    "courseSubmissions": [],
+    "createCourseFee": 150
   }
 }

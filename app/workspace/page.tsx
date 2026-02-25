@@ -26,10 +26,24 @@ type User = {
     readyAt: string | null;
     lastHarvestAt: string | null;
   };
+  activeDashboardTheme?: string | null;
 };
 
 type HistoryItem = { id: string; type?: "master" | "arena" | "auditor"; title: string; score: number; feedback: string; createdAt: string };
-type Post = { id: string; userName: string; content: string; createdAt: string };
+type Post = {
+  id: string;
+  userName: string;
+  content: string;
+  createdAt: string;
+  type?: "message" | "coin-gift" | "system";
+  gift?: {
+    totalCoins: number;
+    maxReceivers: number;
+    perReceiver: number;
+    claimedUserIds: string[];
+    creatorUserName: string;
+  };
+};
 type Tab = "dashboard" | "promptmaster" | "arena" | "auditor" | "history" | "community" | "garden" | "admin";
 type PromptMasterLesson = {
   id: string;
@@ -46,7 +60,15 @@ type PromptMasterLesson = {
   createdByUserId?: string;
 };
 
-type ShopItem = { id: string; name: string; image: string; price: number; effect: string };
+type ShopItem = {
+  id: string;
+  name: string;
+  image: string;
+  price: number;
+  effect: string;
+  category?: "dashboard-theme" | "decoration";
+  themeKey?: string | null;
+};
 type CourseSubmission = {
   id: string;
   title: string;
@@ -123,6 +145,8 @@ export default function WorkspacePage() {
   const [communityInput, setCommunityInput] = useState("");
   const [communitySending, setCommunitySending] = useState(false);
   const [communityError, setCommunityError] = useState("");
+  const [giftCoinAmount, setGiftCoinAmount] = useState(100);
+  const [giftReceiverLimit, setGiftReceiverLimit] = useState(5);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [adminName, setAdminName] = useState("");
@@ -162,6 +186,8 @@ export default function WorkspacePage() {
   const [gameActionLoading, setGameActionLoading] = useState(false);
   const [lessonMenuId, setLessonMenuId] = useState<string>("");
   const [lessonEditDraft, setLessonEditDraft] = useState<PromptMasterLesson | null>(null);
+  const [showLearningModal, setShowLearningModal] = useState(false);
+  const [harvestFxActive, setHarvestFxActive] = useState(false);
 
   const token = typeof window !== "undefined" ? localStorage.getItem(SESSION_TOKEN_KEY) : null;
   const authHeaders = useMemo(
@@ -340,6 +366,8 @@ export default function WorkspacePage() {
   const remainMs = readyAt ? Math.max(0, readyAt - nowTick) : 0;
   const remainSec = Math.ceil(remainMs / 1000);
   const ownedDecorations = (config?.shopItems ?? []).filter((item) => (me?.ownedItemIds ?? []).includes(item.id));
+  const ownedThemes = ownedDecorations.filter((item) => item.category === "dashboard-theme" && item.themeKey);
+  const activeTheme = me?.activeDashboardTheme ?? null;
 
   const submitPromptMaster = async () => {
     if (!selectedLesson) return;
@@ -571,6 +599,44 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     setCommunitySending(false);
   };
 
+  const sendCoinGift = async () => {
+    if (communitySending) return;
+    setCommunitySending(true);
+    setCommunityError("");
+
+    const res = await fetch("/api/posts", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({
+        giftCoin: { totalCoins: giftCoinAmount, maxReceivers: giftReceiverLimit },
+      }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setCommunityError(data.error ?? "Không gửi được lì xì coin.");
+      setCommunitySending(false);
+      return;
+    }
+    await loadMe();
+    await refreshCommunity();
+    setCommunitySending(false);
+  };
+
+  const claimCoinGift = async (postId: string) => {
+    const res = await fetch("/api/posts", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ claimGiftPostId: postId }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setCommunityError(data.error ?? "Không nhận được lì xì.");
+      return;
+    }
+    await loadMe();
+    await refreshCommunity();
+  };
+
   const createAdmin = async () => {
     const res = await fetch("/api/admin/create", {
       method: "POST",
@@ -730,6 +796,17 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     setLessonEditDraft({ ...lesson });
   };
 
+  const openLearningModal = (lessonId: string) => {
+    setSelectedLessonId(lessonId);
+    setLearningLessonId(lessonId);
+    setLessonStep(1);
+    setStep1Reflection("");
+    setStep2DraftPrompt("");
+    setMasterPrompt("");
+    setMasterResult("");
+    setShowLearningModal(true);
+  };
+
   const saveLessonEditor = async () => {
     if (!lessonEditDraft) return;
     await patchConfig({
@@ -805,7 +882,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           </div>
 
           {activeTab === "dashboard" && (
-            <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className={`tab-panel rounded-2xl border p-5 ${activeTheme === "pink" ? "border-pink-300/40 bg-pink-900/30" : activeTheme === "ocean" ? "border-cyan-300/40 bg-cyan-900/30" : "border-white/10 bg-slate-900"}`}>
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
               <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -846,6 +923,21 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                     </span>
                   )) : <p className="text-xs text-slate-300">Bạn chưa có vật phẩm trang trí nào.</p>}
                 </div>
+                {ownedThemes.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {ownedThemes.map((theme) => (
+                      <button
+                        key={theme.id}
+                        onClick={async () => {
+                          await runGameAction({ action: "set_dashboard_theme", themeKey: theme.themeKey });
+                        }}
+                        className={`rounded-lg border px-3 py-1 text-xs ${activeTheme === theme.themeKey ? "border-pink-300/60 text-pink-200" : "border-white/20 text-slate-200"}`}
+                      >
+                        Dùng chủ đề {theme.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           )}
@@ -878,13 +970,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                       <button
                         onClick={() => {
                           playUiSound(620);
-                          setSelectedLessonId(lesson.id);
-                          setLearningLessonId(lesson.id);
-                          setLessonStep(1);
-                          setStep1Reflection("");
-                          setStep2DraftPrompt("");
-                          setMasterPrompt("");
-                          setMasterResult("");
+                          openLearningModal(lesson.id);
                         }}
                         className="mt-3 rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200"
                       >
@@ -896,7 +982,8 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               </div>
               {shopMsg ? <p className="mt-2 text-xs text-amber-200">{shopMsg}</p> : null}
               {lessonMenuId && lessonEditDraft ? (
-                <div className="mt-3 rounded-lg border border-white/15 bg-slate-950/90 p-3 text-xs">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+                  <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-white/15 bg-slate-950/95 p-3 text-xs">
                   <p className="font-semibold text-cyan-200">Chỉnh sửa khóa học (admin)</p>
                   <div className="mt-2 grid gap-2 md:grid-cols-2">
                     <input value={lessonEditDraft.title} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, title: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên khóa"/>
@@ -912,6 +999,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                     <button onClick={saveLessonEditor} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-cyan-200">Lưu</button>
                     <button onClick={async ()=>{ if (!window.confirm("Bạn chắc chưa? Xóa bài học này sẽ không thể hoàn tác.")) return; await patchConfig({ deleteLessonId: lessonMenuId }); setLessonMenuId(""); setLessonEditDraft(null); setShopMsg("Đã xóa bài học."); }} className="rounded-lg border border-rose-300/40 px-3 py-2 text-rose-300">Xóa</button>
                     <button onClick={()=>{ setLessonMenuId(""); setLessonEditDraft(null); }} className="rounded-lg border border-white/20 px-3 py-2">Đóng</button>
+                  </div>
                   </div>
                 </div>
               ) : null}
@@ -929,11 +1017,13 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 <button onClick={createCommunityCourse} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Gửi admin duyệt</button>
               </div>
 
-              {selectedLesson && (
-                <div className="mt-4 rounded-lg border border-white/10 bg-slate-800/70 p-4">
-                  {!isLearningSelectedLesson ? (
-                    <p className="text-sm text-slate-300">Chọn khoá và nhấn <span className="font-semibold text-cyan-200">Học</span> để bắt đầu theo từng bước.</p>
-                  ) : (
+              {showLearningModal && selectedLesson && isLearningSelectedLesson ? (
+                <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4">
+                  <div className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-cyan-300/30 bg-slate-900 p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-cyan-200">Học: {selectedLesson.title}</p>
+                      <button onClick={() => setShowLearningModal(false)} className="rounded-lg border border-white/20 px-2 py-1 text-xs">Đóng</button>
+                    </div>
                     <>
                       <p className="text-xs text-slate-400">Tiến độ: Bước {lessonStep}/3</p>
 
@@ -997,9 +1087,9 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                         </div>
                       )}
                     </>
-                  )}
+                  </div>
                 </div>
-              )}
+              ) : null}
             </div>
           )}
 
@@ -1048,7 +1138,14 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
 
               <div className="mt-3 rounded-xl border border-white/10 bg-slate-900/70 p-4">
                 <p className="text-sm">🌾 Mảnh đất: {me?.farmPlot?.seedType ? `Đang trồng (${me.farmPlot.seedType})` : "Trống"}</p>
-                <p className="text-xs text-slate-400">Sẵn sàng thu hoạch: {me?.farmPlot?.readyAt ? `${new Date(me.farmPlot.readyAt).toLocaleTimeString("vi-VN")} (${remainSec}s)` : "-"}</p>
+                <p className="text-xs text-slate-400">Sẵn sàng thu hoạch: {me?.farmPlot?.readyAt ? (remainSec <= 0 ? "Đã sẵn sàng thu hoạch" : `${new Date(me.farmPlot.readyAt).toLocaleTimeString("vi-VN")} (${remainSec}s)`) : "-"}</p>
+                <div className="mt-2">
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-700">
+                    <div className="h-full bg-emerald-400 transition-all" style={{ width: `${me?.farmPlot?.seedType ? Math.min(100, Math.max(0, 100 - Math.floor((remainSec / ((SEED_OPTIONS.find((seed) => seed.id === me?.farmPlot?.seedType)?.growHours ?? 1) * 3600)) * 100))) : 0}%` }} />
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-300">Tiến trình: {me?.farmPlot?.seedType ? `${Math.min(100, Math.max(0, 100 - Math.floor((remainSec / ((SEED_OPTIONS.find((seed) => seed.id === me?.farmPlot?.seedType)?.growHours ?? 1) * 3600)) * 100)))}%` : "0%"}</p>
+                </div>
+                <div className="mt-2 text-4xl">{remainSec <= 0 && me?.farmPlot?.seedType ? "🌸" : me?.farmPlot?.seedType ? "🌱" : "🪴"}</div>
                 <div className="mt-3 grid gap-2 md:grid-cols-3">
                   {SEED_OPTIONS.map((seed) => (
                     <button key={seed.id} onClick={() => setSelectedSeed(seed.id)} className={`rounded-lg border px-3 py-2 text-left text-xs ${selectedSeed === seed.id ? "border-emerald-300/60 bg-emerald-500/20" : "border-white/15 bg-slate-800"}`}>
@@ -1060,10 +1157,11 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button onClick={async ()=>{ try { const picked = SEED_OPTIONS.find((seed)=>seed.id===selectedSeed); await runGameAction({ action: "plant_seed", seedType: selectedSeed }); setGardenMsg(`Đã gieo ${picked?.name ?? "hạt giống"}.`); playUiSound(620);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi gieo hạt.");}}} disabled={gameActionLoading} className="rounded-lg border border-emerald-300/40 px-3 py-2 text-xs text-emerald-200 disabled:opacity-50">Gieo hạt đã chọn</button>
                   <button onClick={async ()=>{ try { await runGameAction({ action: "water_plot" }); setGardenMsg("Đã tưới cây, giảm 1 giờ trưởng thành."); playUiSound(650);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi tưới cây.");}}} disabled={gameActionLoading} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200 disabled:opacity-50">Tưới cây</button>
-                  <button onClick={async ()=>{ try { const data = await runGameAction({ action: "harvest_plot" }); setGardenMsg(`Thu hoạch thành công +${(data as { coinReward?: number }).coinReward ?? 0} coin`); playUiSound(780);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi thu hoạch.");}}} disabled={gameActionLoading} className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs text-amber-200 disabled:opacity-50">Thu hoạch</button>
+                  <button onClick={async ()=>{ try { const data = await runGameAction({ action: "harvest_plot" }); setGardenMsg(`Thu hoạch thành công +${(data as { coinReward?: number }).coinReward ?? 0} coin`); setHarvestFxActive(true); setTimeout(()=>setHarvestFxActive(false), 1400); playUiSound(780);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi thu hoạch.");}}} disabled={gameActionLoading} className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs text-amber-200 disabled:opacity-50">Thu hoạch</button>
                 </div>
               </div>
               {gardenMsg ? <p className="mt-2 text-xs text-emerald-200">{gardenMsg}</p> : null}
+              {harvestFxActive ? <div className="pointer-events-none mt-2 animate-pulse text-center text-2xl">🎉 ✨ 🎆 ✨ 🎉</div> : null}
             </div>
           )}
 
@@ -1093,6 +1191,11 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 </button>
               </div>
               <p className="mt-1 text-xs text-slate-400">Hiển thị tin nhắn cộng đồng theo danh sách hiện tại. Bấm &quot;Làm mới ngay&quot; để cập nhật.</p>
+              <div className="mt-3 grid gap-2 rounded-xl border border-amber-300/20 bg-amber-500/10 p-3 md:grid-cols-3">
+                <input type="number" min={1} value={giftCoinAmount} onChange={(e)=>setGiftCoinAmount(Number(e.target.value))} className="rounded-lg border border-white/15 bg-slate-800 p-2 text-sm" placeholder="Tổng coin gửi"/>
+                <input type="number" min={1} value={giftReceiverLimit} onChange={(e)=>setGiftReceiverLimit(Number(e.target.value))} className="rounded-lg border border-white/15 bg-slate-800 p-2 text-sm" placeholder="Số người nhận"/>
+                <button onClick={sendCoinGift} disabled={communitySending} className="rounded-lg border border-amber-300/50 px-3 py-2 text-xs text-amber-200 disabled:opacity-50">Gửi lì xì coin</button>
+              </div>
 
               <div
                 ref={chatContainerRef}
@@ -1117,6 +1220,18 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                             <span className="text-slate-400">{formatChatTime(post.createdAt)}</span>
                           </div>
                           <p className="whitespace-pre-wrap break-words">{post.content}</p>
+                          {post.type === "coin-gift" && post.gift ? (
+                            <div className="mt-2 rounded-lg border border-amber-300/30 bg-amber-500/10 p-2 text-xs">
+                              <p>Đã nhận: {post.gift.claimedUserIds.length}/{post.gift.maxReceivers} người</p>
+                              <button
+                                onClick={() => void claimCoinGift(post.id)}
+                                disabled={(post.gift.claimedUserIds ?? []).includes(me?.id ?? "") || post.gift.claimedUserIds.length >= post.gift.maxReceivers}
+                                className="mt-1 rounded border border-amber-300/40 px-2 py-1 text-amber-200 disabled:opacity-50"
+                              >
+                                {(post.gift.claimedUserIds ?? []).includes(me?.id ?? "") ? "Đã nhận" : "Nhận coin"}
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     );

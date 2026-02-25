@@ -23,6 +23,8 @@ type ShopItem = {
   image: string;
   price: number;
   effect: string;
+  category?: "dashboard-theme" | "decoration";
+  themeKey?: string | null;
 };
 
 type CourseSubmission = {
@@ -75,6 +77,7 @@ export type DBUser = {
     readyAt: string | null;
     lastHarvestAt: string | null;
   };
+  activeDashboardTheme?: string | null;
 };
 
 export type DBSession = {
@@ -100,6 +103,14 @@ export type DBPost = {
   userName: string;
   content: string;
   createdAt: string;
+  type?: "message" | "coin-gift" | "system";
+  gift?: {
+    totalCoins: number;
+    maxReceivers: number;
+    perReceiver: number;
+    claimedUserIds: string[];
+    creatorUserName: string;
+  };
 };
 
 export type DBArenaSubmission = {
@@ -225,10 +236,10 @@ const defaultConfig: DBConfig = {
     ],
   },
   shopItems: [
-    { id: "item-seed-basic", name: "Hạt giống cơ bản", image: "🌱", price: 50, effect: "Trồng cây nhận coin" },
-    { id: "item-water-can", name: "Bình tưới", image: "🪣", price: 120, effect: "Trang trí dashboard" },
-    { id: "item-lamp", name: "Đèn vườn", image: "🏮", price: 180, effect: "Trang trí dashboard" },
-    { id: "item-garden-statue", name: "Tượng đá", image: "🗿", price: 260, effect: "Trang trí dashboard" },
+    { id: "item-theme-pink", name: "Sơn hồng dashboard", image: "🎨", price: 180, effect: "Đổi dashboard sang chủ đề hồng", category: "dashboard-theme", themeKey: "pink" },
+    { id: "item-theme-ocean", name: "Sơn đại dương", image: "🌊", price: 220, effect: "Đổi dashboard sang chủ đề đại dương", category: "dashboard-theme", themeKey: "ocean" },
+    { id: "item-neon-frame", name: "Viền neon", image: "💠", price: 140, effect: "Thêm viền phát sáng cho dashboard", category: "decoration", themeKey: null },
+    { id: "item-sakura-lantern", name: "Đèn sakura", image: "🏮", price: 200, effect: "Trang trí góc dashboard bằng đèn sakura", category: "decoration", themeKey: null },
   ],
   courseSubmissions: [],
   createCourseFee: 150,
@@ -286,6 +297,7 @@ const adminSeed: DBUser = {
     readyAt: null,
     lastHarvestAt: null,
   },
+  activeDashboardTheme: null,
 };
 
 const defaultDB = (): DBShape => ({
@@ -324,6 +336,7 @@ function ensureUserStats(user: Partial<DBUser>): DBUser {
       readyAt: null,
       lastHarvestAt: null,
     },
+    activeDashboardTheme: user.activeDashboardTheme ?? null,
   };
 }
 
@@ -355,7 +368,11 @@ function ensureConfig(config?: Partial<DBConfig>): DBConfig {
       config?.auditorScenarios?.length
         ? config.auditorScenarios
         : [config?.auditorScenario ?? defaultConfig.auditorScenario, ...(defaultConfig.auditorScenarios ?? [])],
-    shopItems: config?.shopItems ?? defaultConfig.shopItems,
+    shopItems: (config?.shopItems ?? defaultConfig.shopItems).map((item) => ({
+      ...item,
+      category: item.category ?? "decoration",
+      themeKey: item.themeKey ?? null,
+    })),
     courseSubmissions: config?.courseSubmissions ?? [],
     createCourseFee: config?.createCourseFee ?? defaultConfig.createCourseFee,
   };
@@ -368,6 +385,17 @@ function ensureAdmin(db: DBShape): DBShape {
   }
 
   db.arenaSubmissions = db.arenaSubmissions ?? [];
+  db.posts = (db.posts ?? []).map((post) => ({
+    ...post,
+    type: post.type ?? "message",
+    gift: post.gift
+      ? {
+          ...post.gift,
+          claimedUserIds: post.gift.claimedUserIds ?? [],
+          creatorUserName: post.gift.creatorUserName ?? post.userName,
+        }
+      : undefined,
+  }));
   db.config = ensureConfig(db.config);
   return db;
 }
