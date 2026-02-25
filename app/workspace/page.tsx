@@ -477,6 +477,13 @@ export default function WorkspacePage() {
   const ownedGardenVisual = ownedGardenDecorations.map((item) => item.image).join(" ");
   const dashboardDecorVisual = ownedDashboardDecorations.map((item) => item.image).join(" ");
   const panelClass = `tab-panel rounded-2xl border p-5 ${themeClass} ${hasNeonFrame ? "neon-frame" : ""}`;
+  const themeTintClass = activeTheme === "pink"
+    ? "theme-tint-pink"
+    : activeTheme === "ocean"
+      ? "theme-tint-ocean"
+      : activeTheme === "violet"
+        ? "theme-tint-violet"
+        : "";
 
 
   const submitPromptMaster = async () => {
@@ -948,7 +955,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
   }, [config, selectedLessonId]);
 
   return (
-    <main className={`min-h-screen bg-gradient-to-br px-4 py-6 text-slate-100 md:px-8 md:py-8 ${appThemeClass}`}>
+    <main className={`workspace-themed min-h-screen bg-gradient-to-br px-4 py-6 text-slate-100 md:px-8 md:py-8 ${appThemeClass} ${themeTintClass}`}>
       <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[260px_1fr]">
         <aside className={`rounded-2xl border p-4 ${themeClass}`}>
           <h1 className="text-lg font-bold">{me?.name ?? "Loading..."}</h1>
