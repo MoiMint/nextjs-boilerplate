@@ -58,7 +58,9 @@ export default function WorkspacePage() {
   const router = useRouter();
   const [me, setMe] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
-  const [loading, setLoading] = useState(false);
+  const [masterLoading, setMasterLoading] = useState(false);
+  const [arenaLoading, setArenaLoading] = useState(false);
+  const [auditorLoading, setAuditorLoading] = useState(false);
 
   const [histories, setHistories] = useState<HistoryItem[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -69,6 +71,10 @@ export default function WorkspacePage() {
   const [selectedLessonId, setSelectedLessonId] = useState<string>("");
   const [masterPrompt, setMasterPrompt] = useState("");
   const [masterResult, setMasterResult] = useState<string>("");
+  const [learningLessonId, setLearningLessonId] = useState<string>("");
+  const [lessonStep, setLessonStep] = useState<1 | 2 | 3>(1);
+  const [step1Reflection, setStep1Reflection] = useState("");
+  const [step2DraftPrompt, setStep2DraftPrompt] = useState("");
 
   const [arenaPrompt, setArenaPrompt] = useState("");
   const [arenaResult, setArenaResult] = useState<string>("");
@@ -114,6 +120,29 @@ export default function WorkspacePage() {
     () => config?.promptMasterLessons.find((l) => l.id === selectedLessonId) ?? config?.promptMasterLessons[0],
     [config, selectedLessonId],
   );
+
+  const playUiSound = (frequency = 520) => {
+    if (typeof window === "undefined") return;
+    try {
+      const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = frequency;
+      gainNode.gain.value = 0.04;
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      oscillator.start();
+      oscillator.stop(ctx.currentTime + 0.08);
+      oscillator.onended = () => void ctx.close();
+    } catch {
+      // no audio device or blocked by browser
+    }
+  };
+
+  const isLearningSelectedLesson = !!selectedLesson && learningLessonId === selectedLesson.id;
 
   const loadMe = useCallback(async () => {
     const res = await fetch("/api/me", { headers: { "x-session-token": token ?? "" } });
@@ -195,12 +224,11 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (!token) return;
     const timer = setInterval(() => {
-      void refreshCommunity();
       void loadLeaderboard();
-    }, 2000);
+    }, 4000);
 
     return () => clearInterval(timer);
-  }, [token, refreshCommunity, loadLeaderboard]);
+  }, [token, loadLeaderboard]);
 
   useEffect(() => {
     if (activeTab !== "community") return;
@@ -221,10 +249,12 @@ export default function WorkspacePage() {
   const communityPosts = posts.length;
   const topArena = leaderboard[0];
   const myArenaRank = me ? leaderboard.findIndex((entry) => entry.userName === me.name) + 1 : 0;
+  const arenaWeekTitle = config ? `Arena tuần: ${config.arenaWeekly.weekLabel}` : "";
+  const alreadySubmittedArena = !!histories.find((item) => item.type === "arena" && item.title === arenaWeekTitle);
 
   const submitPromptMaster = async () => {
     if (!selectedLesson) return;
-    setLoading(true);
+    setMasterLoading(true);
 
     const aiRunPrompt = `Nhiệm vụ thực hành: ${selectedLesson.practiceChallenge}
 
@@ -303,12 +333,12 @@ Nhiệm vụ: tự kiểm tra output AI và phản hồi reviewer đã bám yêu
 Reviewer: ${reviewerFeedback}
 
 Điểm cuối: ${score}% | Tổng kết: ${finalFeedback}`);
-    setLoading(false);
+    setMasterLoading(false);
   };
 
   const submitArena = async () => {
     if (!config) return;
-    setLoading(true);
+    setArenaLoading(true);
 
     const solvePrompt = `Bài toán Arena: ${config.arenaWeekly.title}
 Input chuẩn: ${config.arenaWeekly.inputText}
@@ -324,7 +354,7 @@ ${arenaPrompt}`;
 
     if (!generatedOutput) {
       setArenaResult(solveData.error ?? "AI không tạo được output cho Arena.");
-      setLoading(false);
+      setArenaLoading(false);
       return;
     }
 
@@ -350,7 +380,7 @@ Hãy tự đánh giá output có khớp yêu cầu chưa, nêu đúng/sai ngắn
 
     if (!res.ok) {
       setArenaResult(data.error ?? "Nộp Arena thất bại.");
-      setLoading(false);
+      setArenaLoading(false);
       return;
     }
 
@@ -363,7 +393,7 @@ Accuracy: ${data.accuracy}% | Tokens: ${data.tokens} | Efficiency: ${data.effici
     );
     await loadLeaderboard();
     await loadHistories();
-    setLoading(false);
+    setArenaLoading(false);
   };
 
   const randomizeAuditorScenario = () => {
@@ -379,7 +409,7 @@ Accuracy: ${data.accuracy}% | Tokens: ${data.tokens} | Efficiency: ${data.effici
   const submitAuditor = async () => {
     const scenario = activeAuditorScenario ?? config?.auditorScenario;
     if (!scenario) return;
-    setLoading(true);
+    setAuditorLoading(true);
 
     const correctedAnswerPrompt = `Bạn đang sửa câu trả lời AI bị sai.
 Câu sai ban đầu:
@@ -428,7 +458,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     setAuditorResult(`AI trả lời sau khi sửa: ${correctedAnswer}
 
 Điểm: ${score}% | Nhận xét: ${feedback}`);
-    setLoading(false);
+    setAuditorLoading(false);
   };
 
   const postCommunity = async () => {
@@ -539,7 +569,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
             {(["dashboard", "promptmaster", "arena", "auditor", "history", "community", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]).map((key) => (
               <button
                 key={key}
-                onClick={() => setActiveTab(key)}
+                onClick={() => { playUiSound(480); setActiveTab(key); }}
                 className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-all duration-300 ${
                   activeTab === key ? "bg-cyan-400 text-slate-950" : "bg-white/5"
                 }`}
@@ -571,7 +601,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           </div>
 
           {activeTab === "dashboard" && (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
               <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -590,44 +620,116 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "promptmaster" && config && (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
               <h2 className="text-xl font-semibold text-cyan-200">Prompt Master - Nhiều khóa học</h2>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {config.promptMasterLessons.map((lesson) => (
-                  <button key={lesson.id} onClick={() => setSelectedLessonId(lesson.id)} className={`rounded-lg border p-3 text-left ${selectedLesson?.id===lesson.id?'border-cyan-300 bg-cyan-500/10':'border-white/10 bg-slate-800/70'}`}>
-                    <p className="font-semibold">{lesson.title}</p>
-                    <p className="text-xs text-slate-300">{lesson.topic}</p>
-                  </button>
+                  <div key={lesson.id} className={`rounded-lg border p-3 ${selectedLesson?.id===lesson.id?'border-cyan-300 bg-cyan-500/10':'border-white/10 bg-slate-800/70'}`}>
+                    <button onClick={() => setSelectedLessonId(lesson.id)} className="w-full text-left">
+                      <p className="font-semibold">{lesson.title}</p>
+                      <p className="text-xs text-slate-300">{lesson.topic}</p>
+                    </button>
+                    <button
+                      onClick={() => {
+                        playUiSound(620);
+                        setSelectedLessonId(lesson.id);
+                        setLearningLessonId(lesson.id);
+                        setLessonStep(1);
+                        setStep1Reflection("");
+                        setStep2DraftPrompt("");
+                        setMasterPrompt("");
+                        setMasterResult("");
+                      }}
+                      className="mt-3 rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200"
+                    >
+                      Học
+                    </button>
+                  </div>
                 ))}
               </div>
 
               {selectedLesson && (
                 <div className="mt-4 rounded-lg border border-white/10 bg-slate-800/70 p-4">
-                  <p className="text-sm font-semibold text-cyan-200">Bước 1 - Thực trạng</p>
-                  <p className="text-sm text-slate-200">{selectedLesson.situation}</p>
-                  <p className="mt-3 text-sm font-semibold text-cyan-200">Bước 2 - Thông tin sơ qua</p>
-                  <p className="text-sm text-slate-300">{selectedLesson.overview}</p>
-                  <p className="mt-3 text-sm font-semibold text-cyan-200">Bước 3 - Phương pháp và cách dạy</p>
-                  <p className="text-sm text-slate-300">{selectedLesson.methodGuide}</p>
-                  <p className="mt-1 text-xs text-slate-400">(Mục này tập trung cách viết prompt AI để tạo prompt chất lượng)</p>
-                  <p className="mt-3 text-sm font-semibold text-cyan-200">Bước 4 - Thực hành</p>
-                  <p className="text-sm text-slate-200">Đề bài: {selectedLesson.practiceChallenge}</p>
-                  <p className="mt-2 text-xs text-slate-300">Prompt tham khảo: {selectedLesson.samplePrompt}</p>
-                  <textarea value={masterPrompt} onChange={(e)=>setMasterPrompt(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Viết prompt của bạn..."/>
-                                    <button onClick={submitPromptMaster} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">{loading?"AI đang chấm...":"Chấm Prompt Master"}</button>
-                  {masterResult ? <p className="mt-2 whitespace-pre-line text-sm text-slate-200">{masterResult}</p> : null}
+                  {!isLearningSelectedLesson ? (
+                    <p className="text-sm text-slate-300">Chọn khoá và nhấn <span className="font-semibold text-cyan-200">Học</span> để bắt đầu theo từng bước.</p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-slate-400">Tiến độ: Bước {lessonStep}/3</p>
+
+                      {lessonStep === 1 && (
+                        <div className="mt-2">
+                          <p className="text-sm font-semibold text-cyan-200">Bước 1 - Thực trạng & bối cảnh</p>
+                          <p className="mt-1 text-sm text-slate-200">{selectedLesson.situation}</p>
+                          <p className="mt-2 text-sm text-slate-300">{selectedLesson.overview}</p>
+                          <textarea
+                            value={step1Reflection}
+                            onChange={(e)=>setStep1Reflection(e.target.value)}
+                            className="mt-3 h-20 w-full rounded-lg border border-white/15 bg-slate-900 p-2"
+                            placeholder="Viết tóm tắt điều bạn hiểu từ bối cảnh (>= 20 ký tự)..."
+                          />
+                          <button
+                            onClick={() => {
+                              playUiSound(670);
+                              setLessonStep(2);
+                            }}
+                            disabled={step1Reflection.trim().length < 20}
+                            className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50"
+                          >
+                            Tiếp tục bước 2
+                          </button>
+                        </div>
+                      )}
+
+                      {lessonStep === 2 && (
+                        <div className="mt-2">
+                          <p className="text-sm font-semibold text-cyan-200">Bước 2 - Phương pháp viết prompt</p>
+                          <p className="mt-1 text-sm text-slate-300">{selectedLesson.methodGuide}</p>
+                          <p className="mt-1 text-xs text-slate-400">(Mục này tập trung cách viết prompt AI để tạo prompt chất lượng)</p>
+                          <textarea
+                            value={step2DraftPrompt}
+                            onChange={(e)=>setStep2DraftPrompt(e.target.value)}
+                            className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2"
+                            placeholder="Viết prompt nháp dựa trên phương pháp (>= 30 ký tự)..."
+                          />
+                          <button
+                            onClick={() => {
+                              playUiSound(700);
+                              if (!masterPrompt.trim()) setMasterPrompt(step2DraftPrompt);
+                              setLessonStep(3);
+                            }}
+                            disabled={step2DraftPrompt.trim().length < 30}
+                            className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50"
+                          >
+                            Tiếp tục bước 3
+                          </button>
+                        </div>
+                      )}
+
+                      {lessonStep === 3 && (
+                        <div className="mt-2">
+                          <p className="text-sm font-semibold text-cyan-200">Bước 3 - Thực hành & chấm điểm</p>
+                          <p className="text-sm text-slate-200">Đề bài: {selectedLesson.practiceChallenge}</p>
+                          <p className="mt-2 text-xs text-slate-300">Prompt tham khảo: {selectedLesson.samplePrompt}</p>
+                          <textarea value={masterPrompt} onChange={(e)=>setMasterPrompt(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Viết prompt của bạn..."/>
+                          <button onClick={() => { playUiSound(760); void submitPromptMaster(); }} disabled={masterLoading || !masterPrompt.trim()} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">{masterLoading?"AI đang chấm...":"Chấm Prompt Master"}</button>
+                          {masterResult ? <p className="mt-2 whitespace-pre-line text-sm text-slate-200">{masterResult}</p> : null}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </div>
           )}
 
           {activeTab === "arena" && config && (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
               <h2 className="text-xl font-semibold text-cyan-200">Clean Prompt Arena - Chủ đề tuần</h2>
               <p className="mt-2 text-sm text-slate-300">{config.arenaWeekly.weekLabel}: {config.arenaWeekly.title}</p>
               <p className="mt-2 rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">Input: {config.arenaWeekly.inputText}</p>
               <textarea value={arenaPrompt} onChange={(e)=>setArenaPrompt(e.target.value)} className="mt-3 h-20 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Prompt của bạn"/>
-                            <button onClick={submitArena} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">Nộp Arena</button>
+              {alreadySubmittedArena ? <p className="mt-2 text-xs text-amber-300">Bạn đã nộp đề tuần này, mỗi người chỉ được trả lời 1 lần.</p> : null}
+              <button onClick={() => { playUiSound(740); void submitArena(); }} disabled={arenaLoading || alreadySubmittedArena || !arenaPrompt.trim()} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">{arenaLoading ? "AI đang chấm..." : "Nộp Arena"}</button>
               {arenaResult ? <p className="mt-2 whitespace-pre-line text-sm">{arenaResult}</p> : null}
 
               <h3 className="mt-5 text-lg font-semibold text-cyan-200">Leaderboard Accuracy / Tokens</h3>
@@ -642,7 +744,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "auditor" && config && (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold text-cyan-200">AI Auditor</h2>
                 <button onClick={randomizeAuditorScenario} className="rounded-lg border border-cyan-300/50 px-3 py-2 text-sm text-cyan-200">Làm mới đề ngẫu nhiên</button>
@@ -652,13 +754,13 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               <p className="mt-1 text-xs text-slate-400">Nhiệm vụ: nêu lỗi và viết prompt sửa để AI ra đúng.</p>
               <textarea value={auditorIssues} onChange={(e)=>setAuditorIssues(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Nêu các lỗi bạn phát hiện..."/>
               <textarea value={auditorRePrompt} onChange={(e)=>setAuditorRePrompt(e.target.value)} className="mt-2 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Prompt sửa lại để AI trả lời đúng..."/>
-              <button onClick={submitAuditor} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">Chấm điểm Auditor</button>
+              <button onClick={() => { playUiSound(760); void submitAuditor(); }} disabled={auditorLoading || !auditorRePrompt.trim()} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">{auditorLoading ? "AI đang chấm..." : "Chấm điểm Auditor"}</button>
               {auditorResult ? <p className="mt-2 whitespace-pre-line text-sm">{auditorResult}</p> : null}
             </div>
           )}
 
           {activeTab === "history" && (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
               <h2 className="text-xl font-semibold text-cyan-200">Lịch sử cá nhân</h2>
               <div className="mt-3 space-y-2">
                 {histories.map((item) => (
@@ -672,7 +774,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "community" && (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold text-cyan-200">Community Chat</h2>
                 <button
@@ -682,7 +784,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   Làm mới ngay
                 </button>
               </div>
-              <p className="mt-1 text-xs text-slate-400">Chat tự làm mới mỗi 2 giây để mọi người thấy tin nhắn của nhau gần realtime.</p>
+              <p className="mt-1 text-xs text-slate-400">Hiển thị tin nhắn cộng đồng theo danh sách hiện tại. Bấm &quot;Làm mới ngay&quot; để cập nhật.</p>
 
               <div
                 ref={chatContainerRef}
@@ -740,7 +842,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "admin" && me?.isAdmin && (
-            <div className="rounded-2xl border border-amber-300/20 bg-amber-400/10 p-5">
+            <div className="tab-panel rounded-2xl border border-amber-300/20 bg-amber-400/10 p-5">
               <h2 className="text-xl font-semibold text-amber-200">Admin Control</h2>
 
               <div className="mt-3 grid gap-2 md:grid-cols-3">
