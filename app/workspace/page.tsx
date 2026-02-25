@@ -461,18 +461,18 @@ export default function WorkspacePage() {
   const activeTheme = me?.activeDashboardTheme ?? null;
 
   const themeClass = activeTheme === "pink"
-    ? "border-pink-300/40 bg-pink-900/30"
+    ? "border-pink-300/80 bg-pink-700/45"
     : activeTheme === "ocean"
-      ? "border-cyan-300/40 bg-cyan-900/30"
+      ? "border-cyan-300/80 bg-cyan-700/45"
       : activeTheme === "violet"
-        ? "border-violet-300/40 bg-violet-900/30"
+        ? "border-violet-300/80 bg-violet-700/45"
         : "border-white/10 bg-slate-900";
   const appThemeClass = activeTheme === "pink"
-    ? "from-pink-500/10 via-rose-500/10 to-slate-950"
+    ? "from-pink-500/35 via-rose-500/25 to-slate-950"
     : activeTheme === "ocean"
-      ? "from-cyan-500/10 via-blue-500/10 to-slate-950"
+      ? "from-cyan-500/35 via-blue-500/25 to-slate-950"
       : activeTheme === "violet"
-        ? "from-violet-500/10 via-fuchsia-500/10 to-slate-950"
+        ? "from-violet-500/35 via-fuchsia-500/25 to-slate-950"
         : "from-slate-900 via-slate-900 to-slate-950";
   const ownedGardenVisual = ownedGardenDecorations.map((item) => item.image).join(" ");
   const dashboardDecorVisual = ownedDashboardDecorations.map((item) => item.image).join(" ");
@@ -965,7 +965,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 key={key}
                 onClick={() => { playUiSound(480); setActiveTab(key); }}
                 className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-all duration-300 ${
-                  activeTab === key ? "bg-cyan-400 text-slate-950" : hasNeonFrame ? "bg-white/5 neon-chip" : "bg-white/5"
+                  activeTab === key ? (activeTheme === "pink" ? "bg-pink-300 text-slate-950" : activeTheme === "ocean" ? "bg-cyan-300 text-slate-950" : activeTheme === "violet" ? "bg-violet-300 text-slate-950" : "bg-cyan-400 text-slate-950") : hasNeonFrame ? "bg-white/5 neon-chip" : "bg-white/5"
                 }`}
               >
                 {TAB_LABELS[locale][key]}
@@ -1062,6 +1062,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                         key={theme.id}
                         onClick={async () => {
                           await runGameAction({ action: "set_dashboard_theme", themeKey: theme.themeKey });
+                          setShopMsg(`Đã áp dụng chủ đề ${theme.name}.`);
                         }}
                         className={`rounded-lg border px-3 py-1 text-xs ${activeTheme === theme.themeKey ? "border-pink-300/60 text-pink-200" : "border-white/20 text-slate-200"}`}
                       >
