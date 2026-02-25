@@ -36,6 +36,16 @@ export async function POST(request: NextRequest) {
     totalLoginDays: 1,
     loginStreak: 1,
     lastLoginDate: now,
+    coins: 120,
+    unlockedLessonIds: [],
+    ownedItemIds: [],
+    farmPlot: {
+      seedType: null,
+      plantedAt: null,
+      wateredAt: null,
+      readyAt: null,
+      lastHarvestAt: null,
+    },
   };
   db.users.push(user);
 

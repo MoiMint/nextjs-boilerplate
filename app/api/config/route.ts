@@ -1,15 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromToken, newId, readDB, writeDB } from "@/app/lib/server-db";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const token = request.headers.get("x-session-token");
+  const me = await getUserFromToken(token);
   const db = await readDB();
-  return NextResponse.json({ config: db.config });
+
+  const visibleLessons = me?.isAdmin
+    ? db.config.promptMasterLessons
+    : db.config.promptMasterLessons.filter((lesson) => lesson.approved !== false && !lesson.pendingApproval);
+
+  return NextResponse.json({
+    config: {
+      ...db.config,
+      promptMasterLessons: visibleLessons,
+      courseSubmissions: me?.isAdmin ? db.config.courseSubmissions : [],
+    },
+  });
 }
 
 export async function PATCH(request: NextRequest) {
   const token = request.headers.get("x-session-token");
   const me = await getUserFromToken(token);
-  if (!me || !me.isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await request.json()) as {
     promptLesson?: {
@@ -20,11 +33,52 @@ export async function PATCH(request: NextRequest) {
       methodGuide: string;
       practiceChallenge: string;
       samplePrompt: string;
+      price?: number;
     };
     arenaWeekly?: { weekLabel: string; title: string; inputText: string; goldenResponse: string };
+    deleteLessonId?: string;
+    setLessonPrice?: { lessonId: string; price: number };
+    addShopItem?: { name: string; image: string; price: number; effect: string };
+    createCourseSubmission?: {
+      title: string;
+      topic: string;
+      situation: string;
+      overview: string;
+      methodGuide: string;
+      practiceChallenge: string;
+      samplePrompt: string;
+    };
+    approveSubmissionId?: string;
+    rejectSubmissionId?: string;
+    grantCoins?: { userId?: string; amount: number };
   };
 
   const db = await readDB();
+  const dbMe = db.users.find((u) => u.id === me.id);
+  if (!dbMe) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+  if (body.createCourseSubmission) {
+    if (dbMe.coins < db.config.createCourseFee) {
+      return NextResponse.json(
+        { error: `Bạn cần ${db.config.createCourseFee} Endless Coin để tạo khoá học.` },
+        { status: 400 },
+      );
+    }
+
+    dbMe.coins -= db.config.createCourseFee;
+    db.config.courseSubmissions.push({
+      id: newId("course-sub"),
+      ...body.createCourseSubmission,
+      creatorUserId: dbMe.id,
+      creatorName: dbMe.name,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    });
+    await writeDB(db);
+    return NextResponse.json({ ok: true, message: "Đã gửi khoá học chờ admin duyệt." });
+  }
+
+  if (!dbMe.isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   if (body.promptLesson) {
     db.config.promptMasterLessons.push({
@@ -36,11 +90,68 @@ export async function PATCH(request: NextRequest) {
       methodGuide: body.promptLesson.methodGuide,
       practiceChallenge: body.promptLesson.practiceChallenge,
       samplePrompt: body.promptLesson.samplePrompt,
+      price: Math.max(0, Number(body.promptLesson.price ?? 0)),
+      approved: true,
+      pendingApproval: false,
+      createdByUserId: dbMe.id,
     });
   }
 
   if (body.arenaWeekly) {
     db.config.arenaWeekly = body.arenaWeekly;
+  }
+
+  if (body.deleteLessonId) {
+    db.config.promptMasterLessons = db.config.promptMasterLessons.filter((lesson) => lesson.id !== body.deleteLessonId);
+  }
+
+  if (body.setLessonPrice) {
+    const lesson = db.config.promptMasterLessons.find((item) => item.id === body.setLessonPrice?.lessonId);
+    if (lesson) lesson.price = Math.max(0, Number(body.setLessonPrice.price ?? 0));
+  }
+
+  if (body.addShopItem) {
+    db.config.shopItems.push({
+      id: newId("shop"),
+      name: body.addShopItem.name,
+      image: body.addShopItem.image,
+      price: Math.max(1, Number(body.addShopItem.price)),
+      effect: body.addShopItem.effect,
+    });
+  }
+
+  if (body.approveSubmissionId) {
+    const submission = db.config.courseSubmissions.find((item) => item.id === body.approveSubmissionId);
+    if (submission) {
+      db.config.promptMasterLessons.push({
+        id: newId("pm"),
+        title: submission.title,
+        topic: submission.topic,
+        situation: submission.situation,
+        overview: submission.overview,
+        methodGuide: submission.methodGuide,
+        practiceChallenge: submission.practiceChallenge,
+        samplePrompt: submission.samplePrompt,
+        approved: true,
+        pendingApproval: false,
+        createdByUserId: submission.creatorUserId,
+        price: 0,
+      });
+      db.config.courseSubmissions = db.config.courseSubmissions.filter((item) => item.id !== submission.id);
+    }
+  }
+
+  if (body.rejectSubmissionId) {
+    db.config.courseSubmissions = db.config.courseSubmissions.filter((item) => item.id !== body.rejectSubmissionId);
+  }
+
+  if (body.grantCoins) {
+    const grant = body.grantCoins;
+    const amount = Number(grant.amount ?? 0);
+    const targetUser = grant.userId ? db.users.find((u) => u.id === grant.userId) : dbMe;
+    if (targetUser && amount !== 0) {
+      targetUser.coins += amount;
+    }
   }
 
   await writeDB(db);

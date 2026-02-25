@@ -20,6 +20,10 @@ export async function GET(request: NextRequest) {
       totalLoginDays: user.totalLoginDays,
       loginStreak: user.loginStreak,
       lastLoginDate: user.lastLoginDate,
+      coins: user.coins,
+      unlockedLessonIds: user.unlockedLessonIds,
+      ownedItemIds: user.ownedItemIds,
+      farmPlot: user.farmPlot,
     },
   });
 }

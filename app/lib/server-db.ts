@@ -11,6 +11,33 @@ type PromptMasterLesson = {
   methodGuide: string;
   practiceChallenge: string;
   samplePrompt: string;
+  price?: number;
+  approved?: boolean;
+  createdByUserId?: string;
+  pendingApproval?: boolean;
+};
+
+type ShopItem = {
+  id: string;
+  name: string;
+  image: string;
+  price: number;
+  effect: string;
+};
+
+type CourseSubmission = {
+  id: string;
+  title: string;
+  topic: string;
+  situation: string;
+  overview: string;
+  methodGuide: string;
+  practiceChallenge: string;
+  samplePrompt: string;
+  creatorUserId: string;
+  creatorName: string;
+  status: "pending";
+  createdAt: string;
 };
 
 type ArenaWeeklyChallenge = {
@@ -38,6 +65,16 @@ export type DBUser = {
   totalLoginDays: number;
   loginStreak: number;
   lastLoginDate: string | null;
+  coins: number;
+  unlockedLessonIds: string[];
+  ownedItemIds: string[];
+  farmPlot: {
+    seedType: string | null;
+    plantedAt: string | null;
+    wateredAt: string | null;
+    readyAt: string | null;
+    lastHarvestAt: string | null;
+  };
 };
 
 export type DBSession = {
@@ -81,6 +118,9 @@ export type DBConfig = {
   arenaWeekly: ArenaWeeklyChallenge;
   auditorScenario: AuditorScenario;
   auditorScenarios?: AuditorScenario[];
+  shopItems: ShopItem[];
+  courseSubmissions: CourseSubmission[];
+  createCourseFee: number;
 };
 
 export type DBShape = {
@@ -184,6 +224,12 @@ const defaultConfig: DBConfig = {
       "Đồng tiền là Việt Nam Đồng (VND)",
     ],
   },
+  shopItems: [
+    { id: "item-seed-basic", name: "Hạt giống cơ bản", image: "🌱", price: 80, effect: "Trồng cây nhận coin" },
+    { id: "item-water-can", name: "Bình tưới", image: "🪣", price: 120, effect: "Trang trí dashboard" },
+  ],
+  courseSubmissions: [],
+  createCourseFee: 150,
   auditorScenarios: [
     {
       title: "Bắt lỗi ảo giác trong báo cáo AI",
@@ -228,6 +274,16 @@ const adminSeed: DBUser = {
   totalLoginDays: 0,
   loginStreak: 0,
   lastLoginDate: null,
+  coins: 1000,
+  unlockedLessonIds: [],
+  ownedItemIds: [],
+  farmPlot: {
+    seedType: null,
+    plantedAt: null,
+    wateredAt: null,
+    readyAt: null,
+    lastHarvestAt: null,
+  },
 };
 
 const defaultDB = (): DBShape => ({
@@ -256,6 +312,16 @@ function ensureUserStats(user: Partial<DBUser>): DBUser {
     totalLoginDays: user.totalLoginDays ?? 0,
     loginStreak: user.loginStreak ?? 0,
     lastLoginDate: user.lastLoginDate ?? null,
+    coins: user.coins ?? 0,
+    unlockedLessonIds: user.unlockedLessonIds ?? [],
+    ownedItemIds: user.ownedItemIds ?? [],
+    farmPlot: user.farmPlot ?? {
+      seedType: null,
+      plantedAt: null,
+      wateredAt: null,
+      readyAt: null,
+      lastHarvestAt: null,
+    },
   };
 }
 
@@ -272,6 +338,10 @@ function ensureConfig(config?: Partial<DBConfig>): DBConfig {
       methodGuide: lesson.methodGuide ?? legacy.sample ?? "",
       practiceChallenge: lesson.practiceChallenge ?? legacy.brief ?? "",
       samplePrompt: lesson.samplePrompt ?? legacy.sample ?? "",
+      price: lesson.price ?? 0,
+      approved: lesson.approved ?? true,
+      pendingApproval: lesson.pendingApproval ?? false,
+      createdByUserId: lesson.createdByUserId ?? "",
     };
   });
 
@@ -283,6 +353,9 @@ function ensureConfig(config?: Partial<DBConfig>): DBConfig {
       config?.auditorScenarios?.length
         ? config.auditorScenarios
         : [config?.auditorScenario ?? defaultConfig.auditorScenario, ...(defaultConfig.auditorScenarios ?? [])],
+    shopItems: config?.shopItems ?? defaultConfig.shopItems,
+    courseSubmissions: config?.courseSubmissions ?? [],
+    createCourseFee: config?.createCourseFee ?? defaultConfig.createCourseFee,
   };
 }
 

@@ -33,6 +33,16 @@ export async function POST(request: NextRequest) {
     totalLoginDays: 0,
     loginStreak: 0,
     lastLoginDate: null,
+    coins: 500,
+    unlockedLessonIds: [],
+    ownedItemIds: [],
+    farmPlot: {
+      seedType: null,
+      plantedAt: null,
+      wateredAt: null,
+      readyAt: null,
+      lastHarvestAt: null,
+    },
   });
   await writeDB(db);
   return NextResponse.json({ ok: true });

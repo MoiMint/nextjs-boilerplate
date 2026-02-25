@@ -16,11 +16,21 @@ type User = {
   loginStreak?: number;
   lastLoginDate?: string | null;
   stats?: { historyCount: number; postCount: number; lastSessionAt: string | null };
+  coins?: number;
+  unlockedLessonIds?: string[];
+  ownedItemIds?: string[];
+  farmPlot?: {
+    seedType: string | null;
+    plantedAt: string | null;
+    wateredAt: string | null;
+    readyAt: string | null;
+    lastHarvestAt: string | null;
+  };
 };
 
 type HistoryItem = { id: string; type?: "master" | "arena" | "auditor"; title: string; score: number; feedback: string; createdAt: string };
 type Post = { id: string; userName: string; content: string; createdAt: string };
-type Tab = "dashboard" | "promptmaster" | "arena" | "auditor" | "history" | "community" | "admin";
+type Tab = "dashboard" | "promptmaster" | "arena" | "auditor" | "history" | "community" | "garden" | "admin";
 type PromptMasterLesson = {
   id: string;
   title: string;
@@ -30,6 +40,19 @@ type PromptMasterLesson = {
   methodGuide: string;
   practiceChallenge: string;
   samplePrompt: string;
+  price?: number;
+  approved?: boolean;
+  pendingApproval?: boolean;
+  createdByUserId?: string;
+};
+
+type ShopItem = { id: string; name: string; image: string; price: number; effect: string };
+type CourseSubmission = {
+  id: string;
+  title: string;
+  topic: string;
+  creatorName: string;
+  status: "pending";
 };
 
 type ArenaWeekly = {
@@ -50,6 +73,9 @@ type AppConfig = {
   arenaWeekly: ArenaWeekly;
   auditorScenario: AuditorScenario;
   auditorScenarios?: AuditorScenario[];
+  shopItems: ShopItem[];
+  courseSubmissions: CourseSubmission[];
+  createCourseFee: number;
 };
 
 const SESSION_TOKEN_KEY = "blabla-session-token";
@@ -109,6 +135,21 @@ export default function WorkspacePage() {
   const [newArenaTitle, setNewArenaTitle] = useState("");
   const [newArenaInput, setNewArenaInput] = useState("");
   const [newArenaGolden, setNewArenaGolden] = useState("");
+
+  const [shopMsg, setShopMsg] = useState("");
+  const [gardenMsg, setGardenMsg] = useState("");
+  const [courseCreateTitle, setCourseCreateTitle] = useState("");
+  const [courseCreateTopic, setCourseCreateTopic] = useState("");
+  const [courseCreateSituation, setCourseCreateSituation] = useState("");
+  const [courseCreateOverview, setCourseCreateOverview] = useState("");
+  const [courseCreateMethod, setCourseCreateMethod] = useState("");
+  const [courseCreatePractice, setCourseCreatePractice] = useState("");
+  const [courseCreateSample, setCourseCreateSample] = useState("");
+  const [shopItemName, setShopItemName] = useState("");
+  const [shopItemImage, setShopItemImage] = useState("🌱");
+  const [shopItemPrice, setShopItemPrice] = useState(80);
+  const [shopItemEffect, setShopItemEffect] = useState("");
+  const [coursePriceDraft, setCoursePriceDraft] = useState<Record<string, number>>({});
 
   const token = typeof window !== "undefined" ? localStorage.getItem(SESSION_TOKEN_KEY) : null;
   const authHeaders = useMemo(
@@ -237,6 +278,36 @@ export default function WorkspacePage() {
     el.scrollTop = el.scrollHeight;
   }, [activeTab, posts]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = localStorage.getItem("blabla-lesson-progress");
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        learningLessonId?: string;
+        lessonStep?: 1 | 2 | 3;
+        step1Reflection?: string;
+        step2DraftPrompt?: string;
+        masterPrompt?: string;
+      };
+      if (parsed.learningLessonId) setLearningLessonId(parsed.learningLessonId);
+      if (parsed.lessonStep) setLessonStep(parsed.lessonStep);
+      if (parsed.step1Reflection) setStep1Reflection(parsed.step1Reflection);
+      if (parsed.step2DraftPrompt) setStep2DraftPrompt(parsed.step2DraftPrompt);
+      if (parsed.masterPrompt) setMasterPrompt(parsed.masterPrompt);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(
+      "blabla-lesson-progress",
+      JSON.stringify({ learningLessonId, lessonStep, step1Reflection, step2DraftPrompt, masterPrompt }),
+    );
+  }, [learningLessonId, lessonStep, step1Reflection, step2DraftPrompt, masterPrompt]);
+
   const avgScore = histories.length
     ? Math.round(histories.reduce((sum, item) => sum + item.score, 0) / histories.length)
     : 0;
@@ -328,11 +399,8 @@ Nhiệm vụ: tự kiểm tra output AI và phản hồi reviewer đã bám yêu
     });
 
     await loadHistories();
-    setMasterResult(`AI tạo output: ${generatedOutput}
-
-Reviewer: ${reviewerFeedback}
-
-Điểm cuối: ${score}% | Tổng kết: ${finalFeedback}`);
+    await loadMe();
+    setMasterResult(`AI tạo output: ${generatedOutput}\n\nReviewer: ${reviewerFeedback}\n\nĐiểm cuối: ${score}% | Tổng kết: ${finalFeedback}\n\n+40 Endless Coin`);
     setMasterLoading(false);
   };
 
@@ -393,6 +461,8 @@ Accuracy: ${data.accuracy}% | Tokens: ${data.tokens} | Efficiency: ${data.effici
     );
     await loadLeaderboard();
     await loadHistories();
+    await loadMe();
+    setArenaResult((prev) => `${prev}\n\n+35 Endless Coin`);
     setArenaLoading(false);
   };
 
@@ -455,9 +525,8 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     });
 
     await loadHistories();
-    setAuditorResult(`AI trả lời sau khi sửa: ${correctedAnswer}
-
-Điểm: ${score}% | Nhận xét: ${feedback}`);
+    await loadMe();
+    setAuditorResult(`AI trả lời sau khi sửa: ${correctedAnswer}\n\nĐiểm: ${score}% | Nhận xét: ${feedback}\n\n+30 Endless Coin`);
     setAuditorLoading(false);
   };
 
@@ -513,6 +582,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           methodGuide: newLessonMethodGuide,
           practiceChallenge: newLessonPracticeChallenge,
           samplePrompt: newLessonSamplePrompt,
+          price: coursePriceDraft["new"] ?? 0,
         },
       }),
     });
@@ -557,6 +627,81 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     loadLeaderboard();
   };
 
+  const patchConfig = async (payload: Record<string, unknown>) => {
+    const res = await fetch("/api/config", {
+      method: "PATCH",
+      headers: authHeaders,
+      body: JSON.stringify(payload),
+    });
+    const data = (await res.json()) as { error?: string; message?: string };
+    if (!res.ok) throw new Error(data.error ?? "Không thực hiện được thao tác config.");
+    await loadConfig();
+    await loadMe();
+    return data;
+  };
+
+  const runGameAction = async (payload: Record<string, unknown>) => {
+    const res = await fetch("/api/game", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify(payload),
+    });
+    const data = (await res.json()) as { error?: string; coinReward?: number };
+    if (!res.ok) throw new Error(data.error ?? "Không thực hiện được hành động.");
+    await loadMe();
+    await loadConfig();
+    return data;
+  };
+
+  const buyLesson = async (lessonId: string) => {
+    try {
+      await runGameAction({ action: "buy_lesson", lessonId });
+      setShopMsg("Mua khóa học thành công. Đã mở khóa vĩnh viễn!");
+      playUiSound(780);
+    } catch (error) {
+      setShopMsg(error instanceof Error ? error.message : "Mua khóa thất bại.");
+    }
+  };
+
+  const buyItem = async (itemId: string) => {
+    try {
+      await runGameAction({ action: "buy_item", itemId });
+      setShopMsg("Mua vật phẩm thành công.");
+      playUiSound(740);
+    } catch (error) {
+      setShopMsg(error instanceof Error ? error.message : "Mua vật phẩm thất bại.");
+    }
+  };
+
+  const createCommunityCourse = async () => {
+    try {
+      const data = await patchConfig({
+        createCourseSubmission: {
+          title: courseCreateTitle,
+          topic: courseCreateTopic,
+          situation: courseCreateSituation,
+          overview: courseCreateOverview,
+          methodGuide: courseCreateMethod,
+          practiceChallenge: courseCreatePractice,
+          samplePrompt: courseCreateSample,
+        },
+      });
+      setShopMsg(data.message ?? "Đã gửi khóa học chờ duyệt.");
+      setCourseCreateTitle("");
+      setCourseCreateTopic("");
+      setCourseCreateSituation("");
+      setCourseCreateOverview("");
+      setCourseCreateMethod("");
+      setCourseCreatePractice("");
+      setCourseCreateSample("");
+      playUiSound(650);
+    } catch (error) {
+      setShopMsg(error instanceof Error ? error.message : "Không gửi được khóa học.");
+    }
+  };
+
+  const unlockable = (lesson: PromptMasterLesson) => (lesson.price ?? 0) > 0 && !(me?.unlockedLessonIds ?? []).includes(lesson.id);
+
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 md:px-8 md:py-8">
       <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[260px_1fr]">
@@ -566,7 +711,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           <p className="mt-1 text-xs text-cyan-300">Chuỗi đăng nhập: {me?.loginStreak ?? 0} ngày</p>
 
           <div className="mt-5 space-y-2">
-            {(["dashboard", "promptmaster", "arena", "auditor", "history", "community", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]).map((key) => (
+            {(["dashboard", "promptmaster", "arena", "auditor", "history", "community", "garden", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]).map((key) => (
               <button
                 key={key}
                 onClick={() => { playUiSound(480); setActiveTab(key); }}
@@ -598,6 +743,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
             <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Khoá PromptMaster đã xong</p><p className="text-2xl font-bold text-cyan-300">{completedCourses}</p></div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Lượt Arena / Auditor</p><p className="text-xl font-bold text-violet-300">{arenaAttempts} / {auditorAttempts}</p></div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Bài cộng đồng</p><p className="text-2xl font-bold text-amber-300">{communityPosts}</p></div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Endless Coin</p><p className="text-2xl font-bold text-yellow-300">{me?.coins ?? 0}</p></div>
           </div>
 
           {activeTab === "dashboard" && (
@@ -616,6 +762,22 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <p className="mt-1">Bài mới nhất: {histories[0] ? `${histories[0].title} (${histories[0].score}%)` : "Chưa có"}</p>
                 </div>
               </div>
+
+              <div className="mt-4 rounded-xl border border-emerald-300/20 bg-emerald-500/10 p-4">
+                <h3 className="text-lg font-semibold text-emerald-200">Cửa hàng Dashboard</h3>
+                <p className="mt-1 text-xs text-slate-300">Mua vật phẩm để trang trí dashboard hoặc dùng cho khu vườn.</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {config?.shopItems.map((item) => (
+                    <div key={item.id} className="rounded-lg border border-white/10 bg-slate-900/70 p-3 text-sm">
+                      <p className="text-xl">{item.image}</p>
+                      <p className="font-semibold">{item.name}</p>
+                      <p className="text-xs text-slate-300">{item.effect}</p>
+                      <p className="mt-1 text-xs text-amber-300">{item.price} Coin</p>
+                      <button onClick={() => void buyItem(item.id)} className="mt-2 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-200">Mua</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -624,28 +786,64 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               <h2 className="text-xl font-semibold text-cyan-200">Prompt Master - Nhiều khóa học</h2>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {config.promptMasterLessons.map((lesson) => (
-                  <div key={lesson.id} className={`rounded-lg border p-3 ${selectedLesson?.id===lesson.id?'border-cyan-300 bg-cyan-500/10':'border-white/10 bg-slate-800/70'}`}>
+                  <div key={lesson.id} className={`relative rounded-lg border p-3 ${selectedLesson?.id===lesson.id?'border-cyan-300 bg-cyan-500/10':'border-white/10 bg-slate-800/70'}`}>
+                    {me?.isAdmin ? (
+                      <button
+                        onClick={async () => {
+                          if (!window.confirm("Bạn chắc chưa? Xóa bài học này sẽ không thể hoàn tác.")) return;
+                          await patchConfig({ deleteLessonId: lesson.id });
+                          setSelectedLessonId("");
+                          setShopMsg("Đã xóa bài học.");
+                          playUiSound(330);
+                        }}
+                        className="absolute right-2 top-2 rounded-full border border-rose-300/40 px-2 text-xs text-rose-300"
+                        title="Xóa bài học"
+                      >
+                        ✕
+                      </button>
+                    ) : null}
                     <button onClick={() => setSelectedLessonId(lesson.id)} className="w-full text-left">
                       <p className="font-semibold">{lesson.title}</p>
                       <p className="text-xs text-slate-300">{lesson.topic}</p>
+                      {(lesson.price ?? 0) > 0 ? <p className="mt-1 text-xs text-amber-300">Giá: {lesson.price} Endless Coin</p> : null}
                     </button>
-                    <button
-                      onClick={() => {
-                        playUiSound(620);
-                        setSelectedLessonId(lesson.id);
-                        setLearningLessonId(lesson.id);
-                        setLessonStep(1);
-                        setStep1Reflection("");
-                        setStep2DraftPrompt("");
-                        setMasterPrompt("");
-                        setMasterResult("");
-                      }}
-                      className="mt-3 rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200"
-                    >
-                      Học
-                    </button>
+                    {unlockable(lesson) ? (
+                      <button onClick={() => void buyLesson(lesson.id)} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-2 text-xs text-amber-200">
+                        {(lesson.price ?? 0)} Coin
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          playUiSound(620);
+                          setSelectedLessonId(lesson.id);
+                          setLearningLessonId(lesson.id);
+                          setLessonStep(1);
+                          setStep1Reflection("");
+                          setStep2DraftPrompt("");
+                          setMasterPrompt("");
+                          setMasterResult("");
+                        }}
+                        className="mt-3 rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200"
+                      >
+                        Học
+                      </button>
+                    )}
                   </div>
                 ))}
+              </div>
+              {shopMsg ? <p className="mt-2 text-xs text-amber-200">{shopMsg}</p> : null}
+              <div className="mt-4 rounded-lg border border-white/10 bg-slate-900/60 p-3">
+                <p className="text-sm font-semibold text-cyan-200">Tạo khoá học cộng đồng (phí {config.createCourseFee} coin)</p>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  <input value={courseCreateTitle} onChange={(e)=>setCourseCreateTitle(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên khóa"/>
+                  <input value={courseCreateTopic} onChange={(e)=>setCourseCreateTopic(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Chủ đề"/>
+                  <input value={courseCreateSituation} onChange={(e)=>setCourseCreateSituation(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Thực trạng"/>
+                  <input value={courseCreateOverview} onChange={(e)=>setCourseCreateOverview(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Tóm tắt"/>
+                  <input value={courseCreateMethod} onChange={(e)=>setCourseCreateMethod(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Phương pháp"/>
+                  <input value={courseCreatePractice} onChange={(e)=>setCourseCreatePractice(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Bài thực hành"/>
+                  <input value={courseCreateSample} onChange={(e)=>setCourseCreateSample(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Prompt mẫu"/>
+                </div>
+                <button onClick={createCommunityCourse} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Gửi admin duyệt</button>
               </div>
 
               {selectedLesson && (
@@ -759,6 +957,25 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
             </div>
           )}
 
+
+          {activeTab === "garden" && (
+            <div className="tab-panel rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-5">
+              <h2 className="text-xl font-semibold text-emerald-200">Trồng cây</h2>
+              <p className="mt-1 text-sm text-slate-300">Mảnh đất của bạn dùng Endless Coin để mua hạt giống, gieo, tưới và thu hoạch.</p>
+
+              <div className="mt-3 rounded-xl border border-white/10 bg-slate-900/70 p-4">
+                <p className="text-sm">🌾 Mảnh đất: {me?.farmPlot?.seedType ? `Đang trồng (${me.farmPlot.seedType})` : "Trống"}</p>
+                <p className="text-xs text-slate-400">Sẵn sàng thu hoạch: {me?.farmPlot?.readyAt ? new Date(me.farmPlot.readyAt).toLocaleTimeString("vi-VN") : "-"}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button onClick={async ()=>{ try { await runGameAction({ action: "plant_seed" }); setGardenMsg("Đã gieo hạt giống."); playUiSound(620);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi gieo hạt.");}}} className="rounded-lg border border-emerald-300/40 px-3 py-2 text-xs text-emerald-200">Gieo hạt (80 coin)</button>
+                  <button onClick={async ()=>{ try { await runGameAction({ action: "water_plot" }); setGardenMsg("Đã tưới cây."); playUiSound(650);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi tưới cây.");}}} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200">Tưới cây</button>
+                  <button onClick={async ()=>{ try { const data = await runGameAction({ action: "harvest_plot" }); setGardenMsg(`Thu hoạch thành công +${(data as { coinReward?: number }).coinReward ?? 0} coin`); playUiSound(780);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi thu hoạch.");}}} className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs text-amber-200">Thu hoạch</button>
+                </div>
+              </div>
+              {gardenMsg ? <p className="mt-2 text-xs text-emerald-200">{gardenMsg}</p> : null}
+            </div>
+          )}
+
           {activeTab === "history" && (
             <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
               <h2 className="text-xl font-semibold text-cyan-200">Lịch sử cá nhân</h2>
@@ -776,7 +993,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           {activeTab === "community" && (
             <div className="tab-panel rounded-2xl border border-white/10 bg-slate-900 p-5">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold text-cyan-200">Community Chat</h2>
+                <h2 className="text-xl font-semibold text-cyan-200">Chat cộng đồng</h2>
                 <button
                   onClick={refreshCommunity}
                   className="rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200"
@@ -862,7 +1079,51 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 <input value={newLessonPracticeChallenge} onChange={(e)=>setNewLessonPracticeChallenge(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Đề bài thực hành"/>
                 <input value={newLessonSamplePrompt} onChange={(e)=>setNewLessonSamplePrompt(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Prompt mẫu"/>
               </div>
-              <button onClick={addPromptLesson} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm khóa Prompt Master</button>
+              <div className="mt-2 flex items-center gap-2">
+                <input type="number" value={coursePriceDraft["new"] ?? 0} onChange={(e)=>setCoursePriceDraft((prev)=>({ ...prev, new: Number(e.target.value) }))} className="w-40 rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Giá coin"/>
+                <button onClick={addPromptLesson} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm khóa Prompt Master</button>
+              </div>
+
+              <h3 className="mt-4 font-semibold text-amber-200">Đặt giá / duyệt khoá học</h3>
+              <div className="mt-2 space-y-2">
+                {config?.promptMasterLessons.map((lesson) => (
+                  <div key={lesson.id} className="rounded-lg border border-white/10 bg-slate-900/60 p-3 text-xs">
+                    <p>{lesson.title}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <input type="number" value={coursePriceDraft[lesson.id] ?? lesson.price ?? 0} onChange={(e)=>setCoursePriceDraft((prev)=>({ ...prev, [lesson.id]: Number(e.target.value) }))} className="w-28 rounded-md border border-white/15 bg-slate-800 p-1"/>
+                      <button onClick={async ()=>{ await patchConfig({ setLessonPrice: { lessonId: lesson.id, price: coursePriceDraft[lesson.id] ?? lesson.price ?? 0 } }); setAdminMsg("Đã cập nhật giá khóa học."); }} className="rounded-md border border-cyan-300/40 px-2 py-1 text-cyan-200">Lưu giá</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <h3 className="mt-4 font-semibold text-amber-200">Duyệt khóa học người dùng gửi</h3>
+              <div className="mt-2 space-y-2">
+                {(config?.courseSubmissions ?? []).map((sub) => (
+                  <div key={sub.id} className="rounded-lg border border-white/10 bg-slate-900/60 p-3 text-xs">
+                    <p className="font-semibold">{sub.title} - {sub.topic}</p>
+                    <p className="text-slate-300">Tác giả: {sub.creatorName}</p>
+                    <div className="mt-2 flex gap-2">
+                      <button onClick={async ()=>{ await patchConfig({ approveSubmissionId: sub.id }); setAdminMsg("Đã duyệt khóa học."); }} className="rounded-md border border-emerald-300/40 px-2 py-1 text-emerald-200">Duyệt</button>
+                      <button onClick={async ()=>{ await patchConfig({ rejectSubmissionId: sub.id }); setAdminMsg("Đã từ chối và xóa đề xuất."); }} className="rounded-md border border-rose-300/40 px-2 py-1 text-rose-200">Từ chối</button>
+                    </div>
+                  </div>
+                ))}
+                {!(config?.courseSubmissions?.length) ? <p className="text-xs text-slate-400">Không có khóa học chờ duyệt.</p> : null}
+              </div>
+
+              <h3 className="mt-4 font-semibold text-amber-200">Shop - thêm vật phẩm bán</h3>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <input value={shopItemName} onChange={(e)=>setShopItemName(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên vật phẩm"/>
+                <input value={shopItemImage} onChange={(e)=>setShopItemImage(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Emoji/URL hình"/>
+                <input type="number" value={shopItemPrice} onChange={(e)=>setShopItemPrice(Number(e.target.value))} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Giá"/>
+                <input value={shopItemEffect} onChange={(e)=>setShopItemEffect(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Công dụng"/>
+              </div>
+              <button onClick={async ()=>{ await patchConfig({ addShopItem: { name: shopItemName, image: shopItemImage, price: shopItemPrice, effect: shopItemEffect } }); setAdminMsg("Đã thêm vật phẩm shop."); setShopItemName(""); setShopItemImage("🌱"); setShopItemPrice(80); setShopItemEffect(""); }} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm vật phẩm shop</button>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button onClick={async ()=>{ await patchConfig({ grantCoins: { amount: 1000 } }); setAdminMsg("Đã cộng +1000 coin."); }} className="rounded-lg bg-amber-300 px-3 py-2 text-sm font-semibold text-slate-950">+1000 coin</button>
+              </div>
 
               <h3 className="mt-4 font-semibold text-amber-200">Thay đổi đề bài Arena tuần</h3>
               <div className="mt-2 grid gap-2 md:grid-cols-2">

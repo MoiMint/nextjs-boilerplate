@@ -40,7 +40,15 @@ export async function POST(request: NextRequest) {
     feedback: body.feedback ?? "",
     createdAt: new Date().toISOString(),
   });
+
+  const rewardMap: Record<"master" | "arena" | "auditor", number> = { master: 40, arena: 35, auditor: 30 };
+  const reward = rewardMap[body.type] ?? 0;
+  const me = db.users.find((u) => u.id === user.id);
+  if (me) {
+    me.coins += reward;
+  }
+
   await writeDB(db);
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, reward });
 }

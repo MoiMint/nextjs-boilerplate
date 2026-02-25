@@ -55,6 +55,9 @@ export async function POST(request: NextRequest) {
     createdAt: new Date().toISOString(),
   });
 
+  const dbUser = db.users.find((item) => item.id === user.id);
+  if (dbUser) dbUser.coins += 35;
+
   await writeDB(db);
-  return NextResponse.json({ accuracy, tokens, efficiency });
+  return NextResponse.json({ accuracy, tokens, efficiency, reward: 35 });
 }
