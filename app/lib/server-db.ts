@@ -371,10 +371,6 @@ function ensureAdmin(db: DBShape): DBShape {
 }
 
 export async function readDB(): Promise<DBShape> {
-  if (global.__blablaDBCache) {
-    return ensureAdmin(global.__blablaDBCache);
-  }
-
   const kvData = await readFromVercelKV();
   if (kvData) {
     const parsed = ensureAdmin(kvData);

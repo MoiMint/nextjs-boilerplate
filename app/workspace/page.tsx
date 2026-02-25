@@ -138,6 +138,7 @@ export default function WorkspacePage() {
 
   const [shopMsg, setShopMsg] = useState("");
   const [gardenMsg, setGardenMsg] = useState("");
+  const [nowTick, setNowTick] = useState(0);
   const [courseCreateTitle, setCourseCreateTitle] = useState("");
   const [courseCreateTopic, setCourseCreateTopic] = useState("");
   const [courseCreateSituation, setCourseCreateSituation] = useState("");
@@ -223,17 +224,13 @@ export default function WorkspacePage() {
   }, [token]);
 
   const loadConfig = useCallback(async () => {
-    const res = await fetch("/api/config");
+    const res = await fetch("/api/config", { headers: { "x-session-token": token ?? "" } });
     if (!res.ok) return;
     const data = (await res.json()) as { config: AppConfig };
     setConfig(data.config);
-    if (!selectedLessonId && data.config.promptMasterLessons.length) {
-      setSelectedLessonId(data.config.promptMasterLessons[0].id);
-    }
-    if (!activeAuditorScenario) {
-      setActiveAuditorScenario(data.config.auditorScenarios?.[0] ?? data.config.auditorScenario ?? null);
-    }
-  }, [activeAuditorScenario, selectedLessonId]);
+    setSelectedLessonId((prev) => prev || data.config.promptMasterLessons[0]?.id || "");
+    setActiveAuditorScenario((prev) => prev ?? data.config.auditorScenarios?.[0] ?? data.config.auditorScenario ?? null);
+  }, [token]);
 
   const loadLeaderboard = useCallback(async () => {
     const res = await fetch("/api/arena/leaderboard");
@@ -279,6 +276,12 @@ export default function WorkspacePage() {
   }, [activeTab, posts]);
 
   useEffect(() => {
+    if (activeTab !== "garden") return;
+    const timer = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [activeTab]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const raw = localStorage.getItem("blabla-lesson-progress");
     if (!raw) return;
@@ -322,6 +325,9 @@ export default function WorkspacePage() {
   const myArenaRank = me ? leaderboard.findIndex((entry) => entry.userName === me.name) + 1 : 0;
   const arenaWeekTitle = config ? `Arena tuần: ${config.arenaWeekly.weekLabel}` : "";
   const alreadySubmittedArena = !!histories.find((item) => item.type === "arena" && item.title === arenaWeekTitle);
+  const readyAt = me?.farmPlot?.readyAt ? new Date(me.farmPlot.readyAt).getTime() : 0;
+  const remainMs = readyAt ? Math.max(0, readyAt - nowTick) : 0;
+  const remainSec = Math.ceil(remainMs / 1000);
 
   const submitPromptMaster = async () => {
     if (!selectedLesson) return;
@@ -702,6 +708,16 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
 
   const unlockable = (lesson: PromptMasterLesson) => (lesson.price ?? 0) > 0 && !(me?.unlockedLessonIds ?? []).includes(lesson.id);
 
+  useEffect(() => {
+    if (!config || !selectedLessonId) return;
+    const exists = config.promptMasterLessons.some((lesson) => lesson.id === selectedLessonId);
+    if (!exists) {
+      setSelectedLessonId(config.promptMasterLessons[0]?.id ?? "");
+      setLearningLessonId("");
+      setLessonStep(1);
+    }
+  }, [config, selectedLessonId]);
+
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 md:px-8 md:py-8">
       <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[260px_1fr]">
@@ -965,7 +981,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
 
               <div className="mt-3 rounded-xl border border-white/10 bg-slate-900/70 p-4">
                 <p className="text-sm">🌾 Mảnh đất: {me?.farmPlot?.seedType ? `Đang trồng (${me.farmPlot.seedType})` : "Trống"}</p>
-                <p className="text-xs text-slate-400">Sẵn sàng thu hoạch: {me?.farmPlot?.readyAt ? new Date(me.farmPlot.readyAt).toLocaleTimeString("vi-VN") : "-"}</p>
+                <p className="text-xs text-slate-400">Sẵn sàng thu hoạch: {me?.farmPlot?.readyAt ? `${new Date(me.farmPlot.readyAt).toLocaleTimeString("vi-VN")} (${remainSec}s)` : "-"}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button onClick={async ()=>{ try { await runGameAction({ action: "plant_seed" }); setGardenMsg("Đã gieo hạt giống."); playUiSound(620);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi gieo hạt.");}}} className="rounded-lg border border-emerald-300/40 px-3 py-2 text-xs text-emerald-200">Gieo hạt (80 coin)</button>
                   <button onClick={async ()=>{ try { await runGameAction({ action: "water_plot" }); setGardenMsg("Đã tưới cây."); playUiSound(650);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi tưới cây.");}}} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200">Tưới cây</button>
