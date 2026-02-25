@@ -238,6 +238,7 @@ const defaultConfig: DBConfig = {
   shopItems: [
     { id: "item-theme-pink", name: "Sơn hồng dashboard", image: "🎨", price: 180, effect: "Đổi dashboard sang chủ đề hồng", category: "dashboard-theme", themeKey: "pink" },
     { id: "item-theme-ocean", name: "Sơn đại dương", image: "🌊", price: 220, effect: "Đổi dashboard sang chủ đề đại dương", category: "dashboard-theme", themeKey: "ocean" },
+    { id: "item-theme-violet", name: "Sơn tím galaxy", image: "🪐", price: 260, effect: "Đổi dashboard sang chủ đề tím", category: "dashboard-theme", themeKey: "violet" },
     { id: "item-neon-frame", name: "Viền neon", image: "💠", price: 140, effect: "Trang trí dashboard", category: "dashboard-decoration", themeKey: null },
     { id: "item-sakura-wall", name: "Tường hoa sakura", image: "🌸", price: 210, effect: "Trang trí dashboard", category: "dashboard-decoration", themeKey: null },
     { id: "item-garden-lamp", name: "Đèn lối đi vườn", image: "🏮", price: 160, effect: "Trang trí khu vườn", category: "garden-decoration", themeKey: null },

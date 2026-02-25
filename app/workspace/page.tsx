@@ -102,6 +102,54 @@ type AppConfig = {
   createCourseFee: number;
 };
 
+type Locale = "vi" | "en";
+
+const TAB_LABELS: Record<Locale, Record<Tab, string>> = {
+  vi: {
+    dashboard: "Bảng điều khiển",
+    promptmaster: "Prompt Master",
+    arena: "Arena",
+    auditor: "Auditor",
+    history: "Lịch sử",
+    community: "Cộng đồng",
+    garden: "Khu vườn",
+    admin: "Quản trị",
+  },
+  en: {
+    dashboard: "Dashboard",
+    promptmaster: "Prompt Master",
+    arena: "Arena",
+    auditor: "Auditor",
+    history: "History",
+    community: "Community",
+    garden: "Garden",
+    admin: "Admin",
+  },
+};
+
+const I18N = {
+  vi: {
+    shopTitle: "Cửa hàng Dashboard",
+    shopDesc: "Mua vật phẩm để trang trí dashboard hoặc cho khu vườn.",
+    ownedTitle: "Vật phẩm trang trí đang sở hữu",
+    buy: "Mua",
+    sell: "Bán",
+    useTheme: "Dùng chủ đề",
+    noItems: "Bạn chưa có vật phẩm trang trí nào.",
+    gardenOwned: "Trang trí vườn đang sở hữu",
+  },
+  en: {
+    shopTitle: "Dashboard Shop",
+    shopDesc: "Buy items to decorate your dashboard or garden.",
+    ownedTitle: "Owned decorations",
+    buy: "Buy",
+    sell: "Sell",
+    useTheme: "Apply theme",
+    noItems: "You do not own any decorations yet.",
+    gardenOwned: "Owned garden decorations",
+  },
+} as const;
+
 const SESSION_TOKEN_KEY = "blabla-session-token";
 const SEED_OPTIONS: SeedSpec[] = [
   { id: "seed-basic", name: "Hạt cải", price: 50, reward: 150, growHours: 8 },
@@ -113,6 +161,7 @@ export default function WorkspacePage() {
   const router = useRouter();
   const [me, setMe] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+  const [locale, setLocale] = useState<Locale>("vi");
   const [masterLoading, setMasterLoading] = useState(false);
   const [arenaLoading, setArenaLoading] = useState(false);
   const [auditorLoading, setAuditorLoading] = useState(false);
@@ -182,7 +231,7 @@ export default function WorkspacePage() {
   const [shopItemPrice, setShopItemPrice] = useState(80);
   const [shopItemEffect, setShopItemEffect] = useState("Trang trí dashboard");
   const [shopItemCategory, setShopItemCategory] = useState<"dashboard-theme" | "dashboard-decoration" | "garden-decoration">("dashboard-decoration");
-  const [shopItemThemeKey, setShopItemThemeKey] = useState<"pink" | "ocean" | "none">("none");
+  const [shopItemThemeKey, setShopItemThemeKey] = useState<"pink" | "ocean" | "violet" | "none">("none");
   const [coursePriceDraft, setCoursePriceDraft] = useState<Record<string, number>>({});
   const [selectedSeed, setSelectedSeed] = useState<string>("seed-basic");
   const [gameActionLoading, setGameActionLoading] = useState(false);
@@ -349,6 +398,19 @@ export default function WorkspacePage() {
       JSON.stringify({ learningLessonId, lessonStep, step1Reflection, step2DraftPrompt, masterPrompt }),
     );
   }, [learningLessonId, lessonStep, step1Reflection, step2DraftPrompt, masterPrompt]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const savedLocale = window.localStorage.getItem("blabla-locale");
+    if (savedLocale === "vi" || savedLocale === "en") setLocale(savedLocale);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("blabla-locale", locale);
+  }, [locale]);
+
+  const text = I18N[locale];
 
   const avgScore = histories.length
     ? Math.round(histories.reduce((sum, item) => sum + item.score, 0) / histories.length)
@@ -847,6 +909,10 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           <h1 className="text-lg font-bold">{me?.name ?? "Loading..."}</h1>
           <p className="text-sm text-slate-300">{me?.email}</p>
           <p className="mt-1 text-xs text-cyan-300">Chuỗi đăng nhập: {me?.loginStreak ?? 0} ngày</p>
+          <div className="mt-3 flex gap-2">
+            <button onClick={() => setLocale("vi")} className={`rounded-md border px-2 py-1 text-xs ${locale === "vi" ? "border-cyan-300 text-cyan-200" : "border-white/20 text-slate-300"}`}>VN</button>
+            <button onClick={() => setLocale("en")} className={`rounded-md border px-2 py-1 text-xs ${locale === "en" ? "border-cyan-300 text-cyan-200" : "border-white/20 text-slate-300"}`}>ENG</button>
+          </div>
 
           <div className="mt-5 space-y-2">
             {(["dashboard", "promptmaster", "arena", "auditor", "history", "community", "garden", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]).map((key) => (
@@ -857,7 +923,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   activeTab === key ? "bg-cyan-400 text-slate-950" : "bg-white/5"
                 }`}
               >
-                {key}
+                {TAB_LABELS[locale][key]}
               </button>
             ))}
           </div>
@@ -885,7 +951,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           </div>
 
           {activeTab === "dashboard" && (
-            <div className={`tab-panel rounded-2xl border p-5 ${activeTheme === "pink" ? "border-pink-300/40 bg-pink-900/30" : activeTheme === "ocean" ? "border-cyan-300/40 bg-cyan-900/30" : "border-white/10 bg-slate-900"}`}>
+            <div className={`tab-panel rounded-2xl border p-5 ${activeTheme === "pink" ? "border-pink-300/40 bg-pink-900/30" : activeTheme === "ocean" ? "border-cyan-300/40 bg-cyan-900/30" : activeTheme === "violet" ? "border-violet-300/40 bg-violet-900/30" : "border-white/10 bg-slate-900"}`}>
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
               <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -902,8 +968,8 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               </div>
 
               <div className="mt-4 rounded-xl border border-emerald-300/20 bg-emerald-500/10 p-4">
-                <h3 className="text-lg font-semibold text-emerald-200">Cửa hàng Dashboard</h3>
-                <p className="mt-1 text-xs text-slate-300">Mua vật phẩm để trang trí dashboard hoặc cho khu vườn.</p>
+                <h3 className="text-lg font-semibold text-emerald-200">{text.shopTitle}</h3>
+                <p className="mt-1 text-xs text-slate-300">{text.shopDesc}</p>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   {config?.shopItems.map((item) => (
                     <div key={item.id} className="rounded-lg border border-white/10 bg-slate-900/70 p-3 text-sm">
@@ -911,14 +977,14 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                       <p className="font-semibold">{item.name}</p>
                       <p className="text-xs text-slate-300">{item.effect}</p>
                       <p className="mt-1 text-xs text-amber-300">{item.price} Coin</p>
-                      <button onClick={() => void buyItem(item.id)} disabled={gameActionLoading} className="mt-2 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-200 disabled:opacity-50">Mua</button>
+                      <button onClick={() => void buyItem(item.id)} disabled={gameActionLoading} className="mt-2 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-200 disabled:opacity-50">{text.buy}</button>
                     </div>
                   ))}
                 </div>
               </div>
 
               <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-500/10 p-4">
-                <h3 className="text-lg font-semibold text-cyan-200">Vật phẩm trang trí đang sở hữu</h3>
+                <h3 className="text-lg font-semibold text-cyan-200">{text.ownedTitle}</h3>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {ownedDecorations.length ? ownedDecorations.map((item) => (
                     <span key={item.id} className="inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-slate-900/70 px-3 py-1 text-xs">
@@ -930,15 +996,15 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                           setShopMsg(`Đã bán ${item.name} và nhận lại ${refund} coin.`);
                         }}
                         className="rounded border border-rose-300/40 px-1 text-rose-300"
-                        title="Bán lại vật phẩm"
+                        title={text.sell}
                       >
-                        x
+                        ×
                       </button>
                     </span>
-                  )) : <p className="text-xs text-slate-300">Bạn chưa có vật phẩm trang trí nào.</p>}
+                  )) : <p className="text-xs text-slate-300">{text.noItems}</p>}
                 </div>
                 {ownedGardenDecorations.length ? (
-                  <p className="mt-3 text-xs text-emerald-200">Trang trí vườn đang sở hữu: {ownedGardenDecorations.map((item)=>`${item.image} ${item.name}`).join(" • ")}</p>
+                  <p className="mt-3 text-xs text-emerald-200">{text.gardenOwned}: {ownedGardenDecorations.map((item)=>`${item.image} ${item.name}`).join(" • ")}</p>
                 ) : null}
                 {ownedThemes.length ? (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -950,7 +1016,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                         }}
                         className={`rounded-lg border px-3 py-1 text-xs ${activeTheme === theme.themeKey ? "border-pink-300/60 text-pink-200" : "border-white/20 text-slate-200"}`}
                       >
-                        Dùng chủ đề {theme.name}
+                        {text.useTheme} {theme.name}
                       </button>
                     ))}
                   </div>
@@ -1341,9 +1407,10 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <option value="dashboard-theme">Dashboard theme</option>
                 </select>
                 {shopItemCategory === "dashboard-theme" ? (
-                  <select value={shopItemThemeKey} onChange={(e)=>setShopItemThemeKey(e.target.value as "pink" | "ocean" | "none")} className="rounded-lg border border-white/15 bg-slate-800 p-2">
+                  <select value={shopItemThemeKey} onChange={(e)=>setShopItemThemeKey(e.target.value as "pink" | "ocean" | "violet" | "none")} className="rounded-lg border border-white/15 bg-slate-800 p-2">
                     <option value="pink">pink</option>
                     <option value="ocean">ocean</option>
+                    <option value="violet">violet</option>
                   </select>
                 ) : <div />}
               </div>

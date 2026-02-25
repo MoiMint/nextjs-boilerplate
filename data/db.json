@@ -8,10 +8,10 @@
       "role": "admin",
       "isAdmin": true,
       "createdAt": "1970-01-01T00:00:00.000Z",
-      "loginCount": 0,
-      "totalLoginDays": 0,
-      "loginStreak": 0,
-      "lastLoginDate": null,
+      "loginCount": 1,
+      "totalLoginDays": 1,
+      "loginStreak": 1,
+      "lastLoginDate": "2026-02-25T12:20:53.968Z",
       "coins": 1000,
       "unlockedLessonIds": [],
       "ownedItemIds": [],
@@ -25,7 +25,13 @@
       "activeDashboardTheme": null
     }
   ],
-  "sessions": [],
+  "sessions": [
+    {
+      "token": "admin-seed.1772022053968.3b69f86dbcd9bdf47adc0820d9ac7401be807d75e6340045386d31a8a6155e19",
+      "userId": "admin-seed",
+      "createdAt": "2026-02-25T12:20:53.968Z"
+    }
+  ],
   "histories": [],
   "posts": [],
   "arenaSubmissions": [],
@@ -120,6 +126,15 @@
         "effect": "Đổi dashboard sang chủ đề đại dương",
         "category": "dashboard-theme",
         "themeKey": "ocean"
+      },
+      {
+        "id": "item-theme-violet",
+        "name": "Sơn tím galaxy",
+        "image": "🪐",
+        "price": 260,
+        "effect": "Đổi dashboard sang chủ đề tím",
+        "category": "dashboard-theme",
+        "themeKey": "violet"
       },
       {
         "id": "item-neon-frame",
