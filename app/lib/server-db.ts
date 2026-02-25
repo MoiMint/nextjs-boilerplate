@@ -364,6 +364,26 @@ function ensureConfig(config?: Partial<DBConfig>): DBConfig {
     };
   });
 
+  const mergedShopItems = [
+    ...(config?.shopItems ?? []),
+    ...defaultConfig.shopItems,
+  ];
+  const uniqueShopItems = mergedShopItems
+    .filter((item) => !!item?.id)
+    .reduce<ShopItem[]>((acc, item) => {
+      if (acc.some((existing) => existing.id === item.id)) return acc;
+      acc.push({
+        ...item,
+        name: item.name ?? "Vật phẩm",
+        image: item.image ?? "🧩",
+        price: Math.max(1, Number(item.price ?? 1)),
+        effect: item.effect ?? "Trang trí",
+        category: item.category ?? "dashboard-decoration",
+        themeKey: item.themeKey ?? null,
+      });
+      return acc;
+    }, []);
+
   return {
     promptMasterLessons: normalizedLessons,
     arenaWeekly: config?.arenaWeekly ?? defaultConfig.arenaWeekly,
@@ -372,11 +392,7 @@ function ensureConfig(config?: Partial<DBConfig>): DBConfig {
       config?.auditorScenarios?.length
         ? config.auditorScenarios
         : [config?.auditorScenario ?? defaultConfig.auditorScenario, ...(defaultConfig.auditorScenarios ?? [])],
-    shopItems: (config?.shopItems ?? defaultConfig.shopItems).map((item) => ({
-      ...item,
-      category: item.category ?? "dashboard-decoration",
-      themeKey: item.themeKey ?? null,
-    })),
+    shopItems: uniqueShopItems,
     courseSubmissions: config?.courseSubmissions ?? [],
     createCourseFee: config?.createCourseFee ?? defaultConfig.createCourseFee,
   };

@@ -144,12 +144,17 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (body.addShopItem) {
+    const cleanName = body.addShopItem.name?.trim();
+    if (!cleanName) {
+      return NextResponse.json({ error: "Tên vật phẩm không được để trống." }, { status: 400 });
+    }
+
     db.config.shopItems.push({
       id: newId("shop"),
-      name: body.addShopItem.name,
-      image: body.addShopItem.image,
+      name: cleanName,
+      image: body.addShopItem.image?.trim() || "🧩",
       price: Math.max(1, Number(body.addShopItem.price)),
-      effect: body.addShopItem.effect,
+      effect: body.addShopItem.effect?.trim() || "Trang trí",
       category: body.addShopItem.category ?? "dashboard-decoration",
       themeKey: body.addShopItem.themeKey ?? null,
     });
