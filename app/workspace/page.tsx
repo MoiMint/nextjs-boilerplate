@@ -137,6 +137,18 @@ const I18N = {
     useTheme: "Dùng chủ đề",
     noItems: "Bạn chưa có vật phẩm trang trí nào.",
     gardenOwned: "Trang trí vườn đang sở hữu",
+    learn: "Học",
+    close: "Đóng",
+    progress: "Tiến độ",
+    step: "Bước",
+    step1Title: "Bước 1 - Thực trạng & bối cảnh",
+    step2Title: "Bước 2 - Phương pháp viết prompt",
+    step3Title: "Bước 3 - Thực hành & chấm điểm",
+    continueStep2: "Tiếp tục bước 2",
+    continueStep3: "Tiếp tục bước 3",
+    evaluating: "AI đang chấm...",
+    gradePromptMaster: "Chấm Prompt Master",
+    adminDeleteItem: "Xóa vật phẩm",
   },
   en: {
     shopTitle: "Dashboard Shop",
@@ -147,6 +159,18 @@ const I18N = {
     useTheme: "Apply theme",
     noItems: "You do not own any decorations yet.",
     gardenOwned: "Owned garden decorations",
+    learn: "Learn",
+    close: "Close",
+    progress: "Progress",
+    step: "Step",
+    step1Title: "Step 1 - Context",
+    step2Title: "Step 2 - Prompt method",
+    step3Title: "Step 3 - Practice & scoring",
+    continueStep2: "Continue to step 2",
+    continueStep3: "Continue to step 3",
+    evaluating: "AI is grading...",
+    gradePromptMaster: "Grade Prompt Master",
+    adminDeleteItem: "Delete item",
   },
 } as const;
 
@@ -431,8 +455,18 @@ export default function WorkspacePage() {
   const remainSec = Math.ceil(remainMs / 1000);
   const ownedDecorations = (config?.shopItems ?? []).filter((item) => (me?.ownedItemIds ?? []).includes(item.id));
   const ownedThemes = ownedDecorations.filter((item) => item.category === "dashboard-theme" && item.themeKey);
+  const ownedDashboardDecorations = ownedDecorations.filter((item) => item.category === "dashboard-decoration");
   const ownedGardenDecorations = ownedDecorations.filter((item) => item.category === "garden-decoration");
   const activeTheme = me?.activeDashboardTheme ?? null;
+
+  const themeClass = activeTheme === "pink"
+    ? "border-pink-300/40 bg-pink-900/30"
+    : activeTheme === "ocean"
+      ? "border-cyan-300/40 bg-cyan-900/30"
+      : activeTheme === "violet"
+        ? "border-violet-300/40 bg-violet-900/30"
+        : "border-white/10 bg-slate-900";
+
 
   const submitPromptMaster = async () => {
     if (!selectedLesson) return;
@@ -941,17 +975,17 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
 
         <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-900/50 p-4 scrollbar-pro max-h-[84vh] overflow-y-auto">
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Điểm trung bình</p><p className="text-2xl font-bold">{avgScore}%</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Số ngày đăng nhập</p><p className="text-2xl font-bold">{me?.totalLoginDays ?? 0}</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Chuỗi hiện tại</p><p className="text-2xl font-bold text-emerald-300">{me?.loginStreak ?? 0} ngày</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Khoá PromptMaster đã xong</p><p className="text-2xl font-bold text-cyan-300">{completedCourses}</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Lượt Arena / Auditor</p><p className="text-xl font-bold text-violet-300">{arenaAttempts} / {auditorAttempts}</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Bài cộng đồng</p><p className="text-2xl font-bold text-amber-300">{communityPosts}</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Endless Coin</p><p className="text-2xl font-bold text-yellow-300">{me?.coins ?? 0}</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Điểm trung bình</p><p className="text-2xl font-bold">{avgScore}%</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Số ngày đăng nhập</p><p className="text-2xl font-bold">{me?.totalLoginDays ?? 0}</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Chuỗi hiện tại</p><p className="text-2xl font-bold text-emerald-300">{me?.loginStreak ?? 0} ngày</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Khoá PromptMaster đã xong</p><p className="text-2xl font-bold text-cyan-300">{completedCourses}</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Lượt Arena / Auditor</p><p className="text-xl font-bold text-violet-300">{arenaAttempts} / {auditorAttempts}</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Bài cộng đồng</p><p className="text-2xl font-bold text-amber-300">{communityPosts}</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Endless Coin</p><p className="text-2xl font-bold text-yellow-300">{me?.coins ?? 0}</p></div>
           </div>
 
           {activeTab === "dashboard" && (
-            <div className={`tab-panel rounded-2xl border p-5 ${activeTheme === "pink" ? "border-pink-300/40 bg-pink-900/30" : activeTheme === "ocean" ? "border-cyan-300/40 bg-cyan-900/30" : activeTheme === "violet" ? "border-violet-300/40 bg-violet-900/30" : "border-white/10 bg-slate-900"}`}>
+            <div className={`tab-panel rounded-2xl border p-5 ${themeClass}`}>
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
               <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -1003,6 +1037,9 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                     </span>
                   )) : <p className="text-xs text-slate-300">{text.noItems}</p>}
                 </div>
+                {ownedDashboardDecorations.length ? (
+                  <p className="mt-3 text-xs text-cyan-200">Dashboard decor: {ownedDashboardDecorations.map((item)=>`${item.image} ${item.name}`).join(" • ")}</p>
+                ) : null}
                 {ownedGardenDecorations.length ? (
                   <p className="mt-3 text-xs text-emerald-200">{text.gardenOwned}: {ownedGardenDecorations.map((item)=>`${item.image} ${item.name}`).join(" • ")}</p>
                 ) : null}
@@ -1057,7 +1094,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                         }}
                         className="mt-3 rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200"
                       >
-                        Học
+                        {text.learn}
                       </button>
                     )}
                   </div>
@@ -1105,14 +1142,14 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <div className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-cyan-300/30 bg-slate-900 p-4">
                     <div className="mb-2 flex items-center justify-between">
                       <p className="text-sm font-semibold text-cyan-200">Học: {selectedLesson.title}</p>
-                      <button onClick={() => setShowLearningModal(false)} className="rounded-lg border border-white/20 px-2 py-1 text-xs">Đóng</button>
+                      <button onClick={() => setShowLearningModal(false)} className="rounded-lg border border-white/20 px-2 py-1 text-xs">{text.close}</button>
                     </div>
                     <>
-                      <p className="text-xs text-slate-400">Tiến độ: Bước {lessonStep}/3</p>
+                      <p className="text-xs text-slate-400">{text.progress}: {text.step} {lessonStep}/3</p>
 
                       {lessonStep === 1 && (
                         <div className="mt-2">
-                          <p className="text-sm font-semibold text-cyan-200">Bước 1 - Thực trạng & bối cảnh</p>
+                          <p className="text-sm font-semibold text-cyan-200">{text.step1Title}</p>
                           <p className="mt-1 text-sm text-slate-200">{selectedLesson.situation}</p>
                           <p className="mt-2 text-sm text-slate-300">{selectedLesson.overview}</p>
                           <textarea
@@ -1129,14 +1166,14 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                             disabled={step1Reflection.trim().length < 20}
                             className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50"
                           >
-                            Tiếp tục bước 2
+                            {text.continueStep2}
                           </button>
                         </div>
                       )}
 
                       {lessonStep === 2 && (
                         <div className="mt-2">
-                          <p className="text-sm font-semibold text-cyan-200">Bước 2 - Phương pháp viết prompt</p>
+                          <p className="text-sm font-semibold text-cyan-200">{text.step2Title}</p>
                           <p className="mt-1 text-sm text-slate-300">{selectedLesson.methodGuide}</p>
                           <p className="mt-1 text-xs text-slate-400">(Mục này tập trung cách viết prompt AI để tạo prompt chất lượng)</p>
                           <textarea
@@ -1154,18 +1191,18 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                             disabled={step2DraftPrompt.trim().length < 30}
                             className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50"
                           >
-                            Tiếp tục bước 3
+                            {text.continueStep3}
                           </button>
                         </div>
                       )}
 
                       {lessonStep === 3 && (
                         <div className="mt-2">
-                          <p className="text-sm font-semibold text-cyan-200">Bước 3 - Thực hành & chấm điểm</p>
+                          <p className="text-sm font-semibold text-cyan-200">{text.step3Title}</p>
                           <p className="text-sm text-slate-200">Đề bài: {selectedLesson.practiceChallenge}</p>
                           <p className="mt-2 text-xs text-slate-300">Prompt tham khảo: {selectedLesson.samplePrompt}</p>
                           <textarea value={masterPrompt} onChange={(e)=>setMasterPrompt(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Viết prompt của bạn..."/>
-                          <button onClick={() => { playUiSound(760); void submitPromptMaster(); }} disabled={masterLoading || !masterPrompt.trim()} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">{masterLoading?"AI đang chấm...":"Chấm Prompt Master"}</button>
+                          <button onClick={() => { playUiSound(760); void submitPromptMaster(); }} disabled={masterLoading || !masterPrompt.trim()} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">{masterLoading ? text.evaluating : text.gradePromptMaster}</button>
                           {masterResult ? <p className="mt-2 whitespace-pre-line text-sm text-slate-200">{masterResult}</p> : null}
                         </div>
                       )}
@@ -1415,6 +1452,19 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 ) : <div />}
               </div>
               <button onClick={async ()=>{ await patchConfig({ addShopItem: { name: shopItemName, image: shopItemImage, price: shopItemPrice, effect: shopItemEffect, category: shopItemCategory, themeKey: shopItemCategory === "dashboard-theme" ? shopItemThemeKey : null } }); setAdminMsg("Đã thêm vật phẩm shop."); setShopItemName(""); setShopItemImage("🌱"); setShopItemPrice(80); setShopItemEffect("Trang trí dashboard"); setShopItemCategory("dashboard-decoration"); setShopItemThemeKey("none"); }} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm vật phẩm shop</button>
+              <div className="mt-2 space-y-2">
+                {(config?.shopItems ?? []).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-900/60 p-2 text-xs">
+                    <p>{item.image} {item.name} - {item.price} coin</p>
+                    <button
+                      onClick={async () => { await patchConfig({ deleteShopItemId: item.id }); setAdminMsg("Đã xóa vật phẩm shop."); }}
+                      className="rounded border border-rose-300/40 px-2 py-1 text-rose-300"
+                    >
+                      {text.adminDeleteItem}
+                    </button>
+                  </div>
+                ))}
+              </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <button onClick={async ()=>{ await patchConfig({ grantCoins: { amount: 1000 } }); setAdminMsg("Đã cộng +1000 coin."); }} className="rounded-lg bg-amber-300 px-3 py-2 text-sm font-semibold text-slate-950">+1000 coin</button>

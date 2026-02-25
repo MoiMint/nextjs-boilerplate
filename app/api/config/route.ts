@@ -68,6 +68,7 @@ export async function PATCH(request: NextRequest) {
     };
     approveSubmissionId?: string;
     rejectSubmissionId?: string;
+    deleteShopItemId?: string;
     grantCoins?: { userId?: string; amount: number };
   };
 
@@ -177,6 +178,18 @@ export async function PATCH(request: NextRequest) {
 
   if (body.rejectSubmissionId) {
     db.config.courseSubmissions = db.config.courseSubmissions.filter((item) => item.id !== body.rejectSubmissionId);
+  }
+
+  if (body.deleteShopItemId) {
+    db.config.shopItems = db.config.shopItems.filter((item) => item.id !== body.deleteShopItemId);
+    db.users = db.users.map((user) => {
+      user.ownedItemIds = user.ownedItemIds.filter((id) => id !== body.deleteShopItemId);
+      const activeThemeStillOwned = db.config.shopItems.some(
+        (item) => item.category === "dashboard-theme" && item.themeKey === user.activeDashboardTheme && user.ownedItemIds.includes(item.id),
+      );
+      if (!activeThemeStillOwned) user.activeDashboardTheme = null;
+      return user;
+    });
   }
 
   if (body.grantCoins) {
