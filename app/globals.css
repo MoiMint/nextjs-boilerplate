@@ -71,15 +71,35 @@ body {
 }
 
 
+
+
 /* Force visible paint effect across hardcoded tab/card colors */
-.workspace-themed.theme-tint-pink {
-  filter: hue-rotate(300deg) saturate(1.25);
+.workspace-themed.theme-tint-pink [class*="bg-slate-9"],
+.workspace-themed.theme-tint-pink [class*="bg-slate-8"] {
+  background-color: rgba(190, 24, 93, 0.45) !important;
 }
 
-.workspace-themed.theme-tint-ocean {
-  filter: hue-rotate(165deg) saturate(1.3);
+.workspace-themed.theme-tint-ocean [class*="bg-slate-9"],
+.workspace-themed.theme-tint-ocean [class*="bg-slate-8"] {
+  background-color: rgba(8, 145, 178, 0.45) !important;
 }
 
-.workspace-themed.theme-tint-violet {
-  filter: hue-rotate(245deg) saturate(1.35);
+.workspace-themed.theme-tint-violet [class*="bg-slate-9"],
+.workspace-themed.theme-tint-violet [class*="bg-slate-8"] {
+  background-color: rgba(109, 40, 217, 0.45) !important;
+}
+
+.workspace-themed.theme-tint-pink [class*="border-white/10"],
+.workspace-themed.theme-tint-pink [class*="border-white/15"] {
+  border-color: rgba(244, 114, 182, 0.55) !important;
+}
+
+.workspace-themed.theme-tint-ocean [class*="border-white/10"],
+.workspace-themed.theme-tint-ocean [class*="border-white/15"] {
+  border-color: rgba(125, 211, 252, 0.55) !important;
+}
+
+.workspace-themed.theme-tint-violet [class*="border-white/10"],
+.workspace-themed.theme-tint-violet [class*="border-white/15"] {
+  border-color: rgba(196, 181, 253, 0.55) !important;
 }

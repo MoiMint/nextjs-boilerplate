@@ -1,6 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromToken, newId, readDB, writeDB } from "@/app/lib/server-db";
 
+const MESSAGE_COOLDOWN_MS = 1000;
+const BLOCKED_TERMS = ["dm me", "sex", "lừa đảo", "đánh bạc", "casino", "http://", "https://"];
+
+function moderateCommunityMessage(raw: string) {
+  const text = raw.trim();
+  if (!text) return "Nội dung trống.";
+  if (text.length > 500) return "Tin nhắn quá dài (tối đa 500 ký tự).";
+  const lowered = text.toLowerCase();
+  if (BLOCKED_TERMS.some((term) => lowered.includes(term))) {
+    return "Tin nhắn chứa nội dung bị chặn bởi bộ lọc cộng đồng.";
+  }
+  return null;
+}
+
+function checkMessageRateLimit(userId: string, dbPosts: Array<{ userId: string; createdAt: string; type?: string }>) {
+  const latest = dbPosts
+    .filter((post) => post.userId === userId && (post.type === "message" || post.type === "coin-gift"))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+  if (!latest) return null;
+  const elapsed = Date.now() - new Date(latest.createdAt).getTime();
+  if (elapsed >= MESSAGE_COOLDOWN_MS) return null;
+  return Math.ceil((MESSAGE_COOLDOWN_MS - elapsed) / 1000);
+}
+
+
 export async function GET() {
   const db = await readDB();
   const posts = db.posts.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 80);
@@ -50,6 +75,10 @@ export async function POST(request: NextRequest) {
   }
 
   if (body.giftCoin) {
+    const waitSec = checkMessageRateLimit(dbUser.id, db.posts);
+    if (waitSec) {
+      return NextResponse.json({ error: `Bạn đang gửi quá nhanh. Vui lòng chờ ${waitSec}s.` }, { status: 429 });
+    }
     const totalCoins = Math.floor(Number(body.giftCoin.totalCoins ?? 0));
     const maxReceivers = Math.floor(Number(body.giftCoin.maxReceivers ?? 0));
     if (totalCoins <= 0 || maxReceivers <= 0) {
@@ -84,15 +113,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, coins: dbUser.coins });
   }
 
-  if (!body.content?.trim()) {
-    return NextResponse.json({ error: "Nội dung trống." }, { status: 400 });
+  const contentText = body.content?.trim() ?? "";
+  const moderationError = moderateCommunityMessage(contentText);
+  if (moderationError) {
+    return NextResponse.json({ error: moderationError }, { status: 400 });
+  }
+
+  const waitSec = checkMessageRateLimit(dbUser.id, db.posts);
+  if (waitSec) {
+    return NextResponse.json({ error: `Bạn đang gửi quá nhanh. Vui lòng chờ ${waitSec}s.` }, { status: 429 });
   }
 
   db.posts.push({
     id: newId("post"),
     userId: dbUser.id,
     userName: dbUser.name,
-    content: body.content.trim(),
+    content: contentText,
     createdAt: new Date().toISOString(),
     type: "message",
   });
