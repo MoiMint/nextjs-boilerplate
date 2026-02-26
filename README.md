@@ -49,6 +49,7 @@ KV_REST_API_TOKEN=
 - API chat:
   - `POST /api/posts`: gửi tin nhắn.
   - `GET /api/posts`: lấy 50 tin nhắn mới nhất.
+  - `DELETE /api/posts`: admin xóa toàn bộ lịch sử chat cộng đồng.
 - UI Community Chat tự polling mỗi 2.5 giây khi đang mở tab Community và chỉ refresh khi tab trình duyệt đang ở trạng thái visible.
 
 ## 3) Chạy local
