@@ -425,6 +425,29 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     loadPosts();
   };
 
+  const useColorName = () => {
+    const colorHint = "Sử dụng tên màu rõ ràng (ví dụ: đỏ, xanh dương, vàng) thay vì mã HEX/RGB.";
+    setCommunityInput((current) => (current.trim() ? `${current}\n${colorHint}` : colorHint));
+  };
+
+  const clearCommunityHistory = async () => {
+    if (!me?.isAdmin) return;
+    const confirmed = window.confirm("Bạn có chắc muốn xoá toàn bộ lịch sử chat Cộng đồng?");
+    if (!confirmed) return;
+
+    const res = await fetch("/api/posts", {
+      method: "DELETE",
+      headers: authHeaders,
+    });
+
+    if (!res.ok) {
+      alert("Không thể xoá lịch sử chat Cộng đồng.");
+      return;
+    }
+
+    setPosts([]);
+  };
+
   const createAdmin = async () => {
     const res = await fetch("/api/admin/create", {
       method: "POST",
@@ -644,9 +667,20 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
 
           {activeTab === "community" && (
             <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
-              <h2 className="text-xl font-semibold text-cyan-200">Cộng đồng</h2>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-xl font-semibold text-cyan-200">Cộng đồng</h2>
+                {me?.isAdmin ? (
+                  <button
+                    onClick={clearCommunityHistory}
+                    className="rounded-lg border border-rose-300/50 px-3 py-2 text-sm text-rose-200"
+                  >
+                    Xóa lịch sử chat
+                  </button>
+                ) : null}
+              </div>
               <div className="mt-3 flex gap-2">
                 <input value={communityInput} onChange={(e)=>setCommunityInput(e.target.value)} className="flex-1 rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Chia sẻ prompt hay..."/>
+                <button onClick={useColorName} className="rounded-lg border border-cyan-300/50 px-3 py-2 text-sm text-cyan-200">Sử dụng tên màu</button>
                 <button onClick={postCommunity} className="rounded-lg bg-cyan-400 px-3 py-2 font-semibold text-slate-950">Đăng</button>
               </div>
               <div className="mt-3 space-y-2">
