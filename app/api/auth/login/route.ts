@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSessionToken, isConsecutiveLogin, readDB, verifyPassword, writeDB } from "@/app/lib/server-db";
+import { createSessionToken, isConsecutiveLogin, newId, readDB, verifyPassword, writeDB } from "@/app/lib/server-db";
 
 export async function POST(request: NextRequest) {
   const { email, password } = (await request.json()) as { email?: string; password?: string };
@@ -33,8 +33,16 @@ export async function POST(request: NextRequest) {
     user.lastLoginDate = now;
   }
 
-  const token = createSessionToken(user.id);
-  db.sessions.push({ token, userId: user.id, createdAt: now });
+  const sessionId = newId("sess");
+  const token = createSessionToken(user.id, sessionId);
+  db.sessions.push({
+    id: sessionId,
+    token,
+    userId: user.id,
+    createdAt: now,
+    expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
+    revokedAt: null,
+  });
   await writeDB(db);
 
   return NextResponse.json({

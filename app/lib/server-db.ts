@@ -88,9 +88,12 @@ export type DBUser = {
 };
 
 export type DBSession = {
+  id: string;
   token: string;
   userId: string;
   createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
 };
 
 export type DBHistory = {
@@ -590,6 +593,19 @@ function ensureAdmin(db: DBShape): DBShape {
   }
 
   db.feedbacks = db.feedbacks ?? [];
+  db.sessions = (db.sessions ?? []).map((session) => {
+    const createdAt = session.createdAt ?? new Date().toISOString();
+    const expiresAt =
+      session.expiresAt ?? new Date(new Date(createdAt).getTime() + 1000 * 60 * 60 * 24 * 7).toISOString();
+
+    return {
+      ...session,
+      id: session.id ?? newId("sess"),
+      createdAt,
+      expiresAt,
+      revokedAt: session.revokedAt ?? null,
+    };
+  });
   db.arenaSubmissions = db.arenaSubmissions ?? [];
   db.posts = (db.posts ?? []).map((post) => ({
     ...post,
@@ -652,19 +668,19 @@ export function newId(prefix: string) {
 
 const tokenSecret = process.env.SESSION_SECRET ?? "blabla-dev-secret";
 
-export function createSessionToken(userId: string) {
+export function createSessionToken(userId: string, sessionId: string) {
   const issuedAt = Date.now().toString();
-  const payload = `${userId}.${issuedAt}`;
+  const payload = `${userId}.${sessionId}.${issuedAt}`;
   const signature = crypto.createHmac("sha256", tokenSecret).update(payload).digest("hex");
   return `${payload}.${signature}`;
 }
 
 export function readUserIdFromToken(token: string | null) {
   if (!token) return null;
-  const [userId, issuedAt, signature] = token.split(".");
-  if (!userId || !issuedAt || !signature) return null;
+  const [userId, sessionId, issuedAt, signature] = token.split(".");
+  if (!userId || !sessionId || !issuedAt || !signature) return null;
 
-  const payload = `${userId}.${issuedAt}`;
+  const payload = `${userId}.${sessionId}.${issuedAt}`;
   const expected = crypto.createHmac("sha256", tokenSecret).update(payload).digest("hex");
   if (expected !== signature) return null;
 
@@ -672,10 +688,21 @@ export function readUserIdFromToken(token: string | null) {
 }
 
 export async function getUserFromToken(token: string | null) {
-  const userId = readUserIdFromToken(token);
-  if (!userId) return null;
+  if (!token) return null;
+
+  const [userId, sessionId, issuedAt, signature] = token.split(".");
+  if (!userId || !sessionId || !issuedAt || !signature) return null;
+
+  const payload = `${userId}.${sessionId}.${issuedAt}`;
+  const expected = crypto.createHmac("sha256", tokenSecret).update(payload).digest("hex");
+  if (expected !== signature) return null;
 
   const db = await readDB();
+  const session = db.sessions.find((s) => s.id === sessionId && s.token === token && s.userId === userId);
+  if (!session) return null;
+  if (session.revokedAt) return null;
+  if (new Date(session.expiresAt).getTime() <= Date.now()) return null;
+
   return db.users.find((u) => u.id === userId) ?? null;
 }
 

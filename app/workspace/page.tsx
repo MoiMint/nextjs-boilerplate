@@ -1092,7 +1092,14 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           </div>
 
           <button
-            onClick={() => {
+            onClick={async () => {
+              const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+              if (sessionToken) {
+                await fetch("/api/auth/logout", {
+                  method: "POST",
+                  headers: { "x-session-token": sessionToken },
+                });
+              }
               localStorage.removeItem(SESSION_TOKEN_KEY);
               router.push("/login");
             }}
