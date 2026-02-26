@@ -202,6 +202,10 @@ export default function WorkspacePage() {
 
   const { patchConfig, runGameAction, gameActionLoading } = useGameActions({ authHeaders, loadConfig, loadMe });
 
+  const refreshCommunity = useCallback(async () => {
+    await loadPosts();
+  }, [loadPosts]);
+
   useEffect(() => {
     if (!token) {
       router.push("/login");
