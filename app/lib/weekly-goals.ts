@@ -3,6 +3,14 @@ import { newId } from "@/app/lib/server-db";
 
 type GoalType = "master" | "arena" | "auditor";
 
+type GoalInput = {
+  deadline: string;
+  targetMaster: number;
+  targetArena: number;
+  targetAuditor: number;
+  rewardCoins?: number;
+};
+
 export function findActiveGoal(db: DBShape, userId: string) {
   const now = Date.now();
   return db.userWeeklyGoals
@@ -45,53 +53,50 @@ function rewardUserForGoal(user: DBUser | undefined, goal: DBUserWeeklyGoal) {
   return goal.rewardCoins;
 }
 
-export function upsertWeeklyGoal(
-  db: DBShape,
-  userId: string,
-  input: {
-    deadline: string;
-    targetMaster: number;
-    targetArena: number;
-    targetAuditor: number;
-    rewardCoins?: number;
-  },
-) {
+function normalizeInput(input: GoalInput) {
   const deadline = new Date(input.deadline);
   if (Number.isNaN(deadline.getTime())) {
     throw new Error("Deadline không hợp lệ.");
   }
 
-  const startsAt = new Date(deadline.getTime() - 1000 * 60 * 60 * 24 * 6).toISOString();
-  const sanitized = {
+  return {
+    startsAt: new Date(deadline.getTime() - 1000 * 60 * 60 * 24 * 6).toISOString(),
+    deadline: deadline.toISOString(),
     targetMaster: Math.max(0, Math.floor(input.targetMaster)),
     targetArena: Math.max(0, Math.floor(input.targetArena)),
     targetAuditor: Math.max(0, Math.floor(input.targetAuditor)),
     rewardCoins: Math.max(0, Math.floor(input.rewardCoins ?? 120)),
   };
+}
 
+function upsertGoalForUser(db: DBShape, userId: string, input: GoalInput) {
+  const normalized = normalizeInput(input);
   let goal = findActiveGoal(db, userId);
   if (!goal) {
     goal = {
       id: newId("goal"),
       userId,
-      startsAt,
-      deadline: deadline.toISOString(),
+      startsAt: normalized.startsAt,
+      deadline: normalized.deadline,
+      targetMaster: normalized.targetMaster,
+      targetArena: normalized.targetArena,
+      targetAuditor: normalized.targetAuditor,
       progressMaster: 0,
       progressArena: 0,
       progressAuditor: 0,
       completedAt: null,
       rewardClaimedAt: null,
+      rewardCoins: normalized.rewardCoins,
       updatedAt: new Date().toISOString(),
-      ...sanitized,
     };
     db.userWeeklyGoals.push(goal);
   } else {
-    goal.startsAt = startsAt;
-    goal.deadline = deadline.toISOString();
-    goal.targetMaster = sanitized.targetMaster;
-    goal.targetArena = sanitized.targetArena;
-    goal.targetAuditor = sanitized.targetAuditor;
-    goal.rewardCoins = sanitized.rewardCoins;
+    goal.startsAt = normalized.startsAt;
+    goal.deadline = normalized.deadline;
+    goal.targetMaster = normalized.targetMaster;
+    goal.targetArena = normalized.targetArena;
+    goal.targetAuditor = normalized.targetAuditor;
+    goal.rewardCoins = normalized.rewardCoins;
     goal.updatedAt = new Date().toISOString();
   }
 
@@ -99,6 +104,23 @@ export function upsertWeeklyGoal(
   const me = db.users.find((item) => item.id === userId);
   const rewarded = rewardUserForGoal(me, goal);
   return { goal, rewarded };
+}
+
+export function upsertWeeklyGoalForUser(db: DBShape, userId: string, input: GoalInput) {
+  return upsertGoalForUser(db, userId, input);
+}
+
+export function upsertWeeklyGoalForAllUsers(db: DBShape, input: GoalInput) {
+  const goalMap: Record<string, DBUserWeeklyGoal> = {};
+  let rewardedTotal = 0;
+
+  for (const user of db.users) {
+    const { goal, rewarded } = upsertGoalForUser(db, user.id, input);
+    goalMap[user.id] = goal;
+    rewardedTotal += rewarded;
+  }
+
+  return { goalMap, rewardedTotal };
 }
 
 export function updateGoalProgressFromHistory(db: DBShape, userId: string, historyType: GoalType) {

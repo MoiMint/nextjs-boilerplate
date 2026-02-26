@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromToken, readDB, writeDB } from "@/app/lib/server-db";
-import { findActiveGoal, upsertWeeklyGoal } from "@/app/lib/weekly-goals";
+import { findActiveGoal, upsertWeeklyGoalForAllUsers } from "@/app/lib/weekly-goals";
 
 export async function GET(request: NextRequest) {
   const token = request.headers.get("x-session-token");
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
 
   const db = await readDB();
   const goal = findActiveGoal(db, user.id) ?? null;
-  return NextResponse.json({ goal });
+  return NextResponse.json({ goal, isGlobalByAdmin: true, canManage: !!user.isAdmin });
 }
 
 export async function POST(request: NextRequest) {
@@ -34,17 +34,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Thiếu dữ liệu mục tiêu tuần." }, { status: 400 });
   }
 
+  if (!user.isAdmin) return NextResponse.json({ error: "Chỉ admin mới được đặt mục tiêu tuần cho toàn server." }, { status: 403 });
+
   const db = await readDB();
   try {
-    const { goal, rewarded } = upsertWeeklyGoal(db, user.id, {
-      deadline: body.deadline,
-      targetMaster: body.targetMaster,
-      targetArena: body.targetArena,
-      targetAuditor: body.targetAuditor,
-      rewardCoins: body.rewardCoins,
+    const { goalMap, rewardedTotal } = upsertWeeklyGoalForAllUsers(db, {
+        deadline: body.deadline,
+        targetMaster: body.targetMaster,
+        targetArena: body.targetArena,
+        targetAuditor: body.targetAuditor,
+        rewardCoins: body.rewardCoins,
+      });
+      await writeDB(db);
+    return NextResponse.json({
+      goal: goalMap[user.id] ?? null,
+      rewarded: goalMap[user.id]?.rewardCoins ?? 0,
+      rewardedTotal,
+      broadcasted: true,
     });
-    await writeDB(db);
-    return NextResponse.json({ goal, rewarded });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Không thể cập nhật mục tiêu tuần." },

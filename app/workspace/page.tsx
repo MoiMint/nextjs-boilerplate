@@ -39,6 +39,7 @@ export default function WorkspacePage() {
   const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
   const [goalDraft, setGoalDraft] = useState({ targetMaster: 2, targetArena: 1, targetAuditor: 1, rewardCoins: 120, deadline: "" });
   const [goalMsg, setGoalMsg] = useState("");
+  const [canManageGoal, setCanManageGoal] = useState(false);
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -88,6 +89,9 @@ export default function WorkspacePage() {
   const [newArenaTitle, setNewArenaTitle] = useState("");
   const [newArenaInput, setNewArenaInput] = useState("");
   const [newArenaGolden, setNewArenaGolden] = useState("");
+  const [newAuditorTitle, setNewAuditorTitle] = useState("");
+  const [newAuditorWrongAnswer, setNewAuditorWrongAnswer] = useState("");
+  const [newAuditorIssues, setNewAuditorIssues] = useState("");
 
   const [shopMsg, setShopMsg] = useState("");
   const [gardenMsg, setGardenMsg] = useState("");
@@ -104,7 +108,7 @@ export default function WorkspacePage() {
   const [shopItemPrice, setShopItemPrice] = useState(80);
   const [shopItemEffect, setShopItemEffect] = useState("Trang trí dashboard");
   const [shopItemCategory, setShopItemCategory] = useState<"dashboard-theme" | "dashboard-decoration" | "garden-decoration">("dashboard-decoration");
-  const [shopItemThemeKey, setShopItemThemeKey] = useState<"pink" | "ocean" | "violet" | "none">("none");
+  const [shopItemThemeKey, setShopItemThemeKey] = useState<"pink" | "ocean" | "violet" | "sunset" | "aurora" | "matrix" | "none">("none");
   const [coursePriceDraft, setCoursePriceDraft] = useState<Record<string, number>>({});
   const [selectedSeed, setSelectedSeed] = useState<string>("seed-basic");
   const [lessonMenuId, setLessonMenuId] = useState<string>("");
@@ -170,8 +174,9 @@ export default function WorkspacePage() {
   const loadWeeklyGoal = useCallback(async () => {
     const res = await fetch("/api/goals", { headers: { "x-session-token": token ?? "" } });
     if (!res.ok) return;
-    const data = (await res.json()) as { goal: WeeklyGoal | null };
+    const data = (await res.json()) as { goal: WeeklyGoal | null; canManage?: boolean };
     setWeeklyGoal(data.goal);
+    setCanManageGoal(!!data.canManage);
   }, [token]);
 
   const loadPosts = useCallback(async () => {
@@ -394,6 +399,7 @@ export default function WorkspacePage() {
   const remainSec = Math.ceil(remainMs / 1000);
   const ownedDecorations = (config?.shopItems ?? []).filter((item) => (me?.ownedItemIds ?? []).includes(item.id));
   const ownedThemes = ownedDecorations.filter((item) => item.category === "dashboard-theme" && item.themeKey);
+  const ownedNameStyles = ownedDecorations.filter((item) => item.category === "name-style" && item.nameStyleKey);
   const ownedDashboardDecorations = ownedDecorations.filter((item) => item.category === "dashboard-decoration");
   const ownedGardenDecorations = ownedDecorations.filter((item) => item.category === "garden-decoration");
   const hasNeonFrame = (me?.ownedItemIds ?? []).includes("item-neon-frame");
@@ -574,9 +580,13 @@ ${auditorRePrompt}`;
       body: JSON.stringify({ context: "AI Auditor Correction", mode: "generate", prompt: correctedAnswerPrompt }),
     });
     const correctionData = (await correctionRes.json()) as { output?: string; error?: string };
-    const correctedAnswer = correctionRes.ok
-      ? correctionData.output ?? ""
-      : correctionData.error ?? "AI không tạo được câu trả lời sửa.";
+    if (!correctionRes.ok || !correctionData.output?.trim()) {
+      setAuditorResult("AI đang quá tải hoặc hết lượt model ở bước sửa câu trả lời. Vui lòng thử lại sau vài phút.");
+      setAuditorLoading(false);
+      return;
+    }
+
+    const correctedAnswer = correctionData.output;
 
     const judgePrompt = `Danh sách lỗi đúng cần tìm: ${scenario.requiredIssues.join(", ")}
 Người dùng phát hiện lỗi: ${auditorIssues}
@@ -591,8 +601,14 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     });
 
     const data = (await res.json()) as { score?: number; feedback?: string; error?: string };
-    const score = res.ok ? data.score ?? 75 : 65;
-    const feedback = res.ok ? data.feedback ?? "Không có nhận xét." : data.error ?? "AI lỗi.";
+    if (!res.ok) {
+      setAuditorResult("Không thể chấm điểm Auditor lúc này do giới hạn model. Vui lòng thử lại sau.");
+      setAuditorLoading(false);
+      return;
+    }
+
+    const score = data.score ?? 75;
+    const feedback = data.feedback ?? "Không có nhận xét.";
 
     await fetch("/api/history", {
       method: "POST",
@@ -619,14 +635,14 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
       headers: authHeaders,
       body: JSON.stringify(goalDraft),
     });
-    const data = (await res.json()) as { error?: string; rewarded?: number; goal?: WeeklyGoal | null };
+    const data = (await res.json()) as { error?: string; rewarded?: number; goal?: WeeklyGoal | null; broadcasted?: boolean };
     if (!res.ok) {
       setGoalMsg(data.error ?? "Không lưu được mục tiêu tuần.");
       return;
     }
 
     setWeeklyGoal(data.goal ?? null);
-    setGoalMsg(data.rewarded ? `Mục tiêu hoàn tất! +${data.rewarded} coin thưởng tuần.` : "Đã cập nhật mục tiêu tuần.");
+    setGoalMsg(data.broadcasted ? "Đã cập nhật mục tiêu tuần cho toàn server." : (data.rewarded ? `Mục tiêu hoàn tất! +${data.rewarded} coin thưởng tuần.` : "Đã cập nhật mục tiêu tuần."));
     await loadMe();
   };
 
@@ -1015,7 +1031,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-amber-200">Weekly Goals</p>
-                    <p className="text-xs text-slate-300">Hoàn thành mục tiêu tuần để nhận thêm {goalDraft.rewardCoins} coin.</p>
+                    <p className="text-xs text-slate-300">{canManageGoal ? `Admin đặt mục tiêu tuần chung cho toàn server.` : "Mục tiêu tuần do admin đặt cho toàn server."} Thưởng {goalDraft.rewardCoins} coin khi hoàn thành.</p>
                   </div>
                   <p className="text-xs text-amber-100">{weeklyGoal?.deadline ? `Deadline: ${weeklyGoal.deadline.slice(0, 10)}` : "Chưa đặt"}</p>
                 </div>
@@ -1023,14 +1039,18 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <div className="h-full rounded-full bg-amber-300 transition-all" style={{ width: `${weeklyGoalPercent}%` }} />
                 </div>
                 <p className="mt-2 text-xs text-amber-100">Tiến độ: {weeklyGoalProgress}/{weeklyGoalTotal} ({weeklyGoalPercent}%) • Master {weeklyGoal?.progressMaster ?? 0}/{goalDraft.targetMaster} • Arena {weeklyGoal?.progressArena ?? 0}/{goalDraft.targetArena} • Auditor {weeklyGoal?.progressAuditor ?? 0}/{goalDraft.targetAuditor}</p>
-                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
-                  <label className="space-y-1"><span>Master</span><input type="number" min={0} value={goalDraft.targetMaster} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetMaster: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
-                  <label className="space-y-1"><span>Arena</span><input type="number" min={0} value={goalDraft.targetArena} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetArena: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
-                  <label className="space-y-1"><span>Auditor</span><input type="number" min={0} value={goalDraft.targetAuditor} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetAuditor: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
-                  <label className="space-y-1"><span>Coin thưởng</span><input type="number" min={0} value={goalDraft.rewardCoins} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, rewardCoins: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
-                  <label className="space-y-1"><span>Deadline</span><input type="date" value={goalDraft.deadline} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, deadline: e.target.value }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
-                </div>
-                <button onClick={() => void saveWeeklyGoal()} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-100">Lưu mục tiêu tuần</button>
+                {canManageGoal ? (
+                  <>
+                    <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
+                      <label className="space-y-1"><span>Master</span><input type="number" min={0} value={goalDraft.targetMaster} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetMaster: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                      <label className="space-y-1"><span>Arena</span><input type="number" min={0} value={goalDraft.targetArena} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetArena: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                      <label className="space-y-1"><span>Auditor</span><input type="number" min={0} value={goalDraft.targetAuditor} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetAuditor: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                      <label className="space-y-1"><span>Coin thưởng</span><input type="number" min={0} value={goalDraft.rewardCoins} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, rewardCoins: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                      <label className="space-y-1"><span>Deadline</span><input type="date" value={goalDraft.deadline} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, deadline: e.target.value }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                    </div>
+                    <button onClick={() => void saveWeeklyGoal()} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-100">Lưu mục tiêu tuần cho toàn server</button>
+                  </>
+                ) : null}
                 {goalMsg ? <p className="mt-2 text-xs text-amber-100">{goalMsg}</p> : null}
               </div>
 
@@ -1117,6 +1137,30 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                     ))}
                   </div>
                 ) : null}
+                {ownedNameStyles.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {ownedNameStyles.map((style) => (
+                      <button
+                        key={style.id}
+                        onClick={async () => {
+                          const nextStyle = style.nameStyleKey ?? null;
+                          setMe((prev) => (prev ? { ...prev, activeNameStyle: nextStyle } : prev));
+                          try {
+                            await runGameAction({ action: "set_name_style", nameStyleKey: style.nameStyleKey });
+                            setShopMsg(`Đã áp dụng style tên ${style.name}.`);
+                          } catch (error) {
+                            await loadMe();
+                            setShopMsg(error instanceof Error ? error.message : "Không áp dụng được style tên.");
+                          }
+                        }}
+                        className={`rounded-lg border px-3 py-1 text-xs ${me?.activeNameStyle === style.nameStyleKey ? "border-emerald-300/70 bg-emerald-500/20 text-emerald-100" : "border-white/20 text-slate-200"}`}
+                      >
+                        {me?.activeNameStyle === style.nameStyleKey ? `✅ Đang dùng ${style.name}` : `Dùng tên ${style.name}`}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {shopMsg ? <p className="mt-3 text-xs text-amber-200">{shopMsg}</p> : null}
               </div>
               </div>
             </DashboardTab>
@@ -1162,7 +1206,6 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   </div>
                 ))}
               </div>
-              {shopMsg ? <p className="mt-2 text-xs text-amber-200">{shopMsg}</p> : null}
               {lessonMenuId && lessonEditDraft ? (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
                   <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-white/15 bg-slate-950/95 p-3 text-xs">
@@ -1521,6 +1564,22 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 <button onClick={addPromptLesson} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm khóa Prompt Master</button>
               </div>
 
+              <h3 className="mt-4 font-semibold text-violet-200">Thêm câu hỏi AI Auditor</h3>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <input value={newAuditorTitle} onChange={(e)=>setNewAuditorTitle(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tiêu đề case Auditor"/>
+                <input value={newAuditorWrongAnswer} onChange={(e)=>setNewAuditorWrongAnswer(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Câu trả lời sai của AI"/>
+                <textarea value={newAuditorIssues} onChange={(e)=>setNewAuditorIssues(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Mỗi dòng là 1 lỗi đúng cần tìm"/>
+              </div>
+              <button onClick={async ()=>{ await patchConfig({ addAuditorScenario: { title: newAuditorTitle, wrongAnswer: newAuditorWrongAnswer, requiredIssues: newAuditorIssues.split("\n") } }); setAdminMsg("Đã thêm câu hỏi AI Auditor."); setNewAuditorTitle(""); setNewAuditorWrongAnswer(""); setNewAuditorIssues(""); }} className="mt-2 rounded-lg border border-violet-300/40 px-3 py-2 text-sm text-violet-200">Thêm câu hỏi Auditor</button>
+              <div className="mt-2 space-y-1 text-xs">
+                {(config?.auditorScenarios ?? []).map((scenario) => (
+                  <div key={scenario.title} className="flex items-center justify-between rounded border border-white/10 px-2 py-1">
+                    <span>{scenario.title}</span>
+                    <button onClick={async ()=>{ await patchConfig({ deleteAuditorScenarioTitle: scenario.title }); setAdminMsg("Đã xóa câu hỏi Auditor."); }} className="rounded border border-rose-300/40 px-2 py-0.5 text-rose-300">Xóa</button>
+                  </div>
+                ))}
+              </div>
+
               <h3 className="mt-4 font-semibold text-amber-200">Duyệt khóa học người dùng gửi</h3>
               <div className="mt-2 space-y-2">
                 {(config?.courseSubmissions ?? []).map((sub) => (
@@ -1554,10 +1613,13 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <option value="dashboard-theme">Dashboard theme</option>
                 </select>
                 {shopItemCategory === "dashboard-theme" ? (
-                  <select value={shopItemThemeKey} onChange={(e)=>setShopItemThemeKey(e.target.value as "pink" | "ocean" | "violet" | "none")} className="rounded-lg border border-white/15 bg-slate-800 p-2">
+                  <select value={shopItemThemeKey} onChange={(e)=>setShopItemThemeKey(e.target.value as "pink" | "ocean" | "violet" | "sunset" | "aurora" | "matrix" | "none")} className="rounded-lg border border-white/15 bg-slate-800 p-2">
                     <option value="pink">pink</option>
                     <option value="ocean">ocean</option>
                     <option value="violet">violet</option>
+                    <option value="sunset">sunset</option>
+                    <option value="aurora">aurora</option>
+                    <option value="matrix">matrix</option>
                   </select>
                 ) : <div />}
               </div>
