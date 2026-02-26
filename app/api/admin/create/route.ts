@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserFromToken, newId, readDB, writeDB } from "@/app/lib/server-db";
+import { getUserFromToken, hashPassword, newId, readDB, writeDB } from "@/app/lib/server-db";
 
 export async function POST(request: NextRequest) {
   const token = request.headers.get("x-session-token");
@@ -21,11 +21,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Email đã tồn tại." }, { status: 409 });
   }
 
+  const passwordHash = await hashPassword(password);
+
   db.users.push({
     id: newId("user"),
     name,
     email,
-    password,
+    passwordHash,
     role: "admin",
     isAdmin: true,
     createdAt: new Date().toISOString(),

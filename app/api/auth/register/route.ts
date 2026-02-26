@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSessionToken, newId, readDB, writeDB } from "@/app/lib/server-db";
+import { createSessionToken, hashPassword, newId, readDB, writeDB } from "@/app/lib/server-db";
 
 export async function POST(request: NextRequest) {
   const { name, email, password, role } = (await request.json()) as {
@@ -24,11 +24,12 @@ export async function POST(request: NextRequest) {
   }
 
   const now = new Date().toISOString();
+  const passwordHash = await hashPassword(password);
   const user = {
     id: newId("user"),
     name,
     email,
-    password,
+    passwordHash,
     role: role ?? "office",
     isAdmin: false,
     createdAt: now,

@@ -65,7 +65,7 @@ export type DBUser = {
   id: string;
   name: string;
   email: string;
-  password: string;
+  passwordHash: string;
   role: string;
   isAdmin: boolean;
   createdAt: string;
@@ -395,7 +395,7 @@ const adminSeed: DBUser = {
   id: "admin-seed",
   name: "Admin Blabla",
   email: "admin@blabla.ai",
-  password: "123456",
+  passwordHash: "scrypt$01010101010101010101010101010101$abd8129e5c37cfaee19872c3bc74909da46c758f98bc04c612eed5b277951d58b85154faa1b3ffd6dbc8dbcaa8d89ab7f94ef5c264806c6572bcb2dd6bd4a36b",
   role: "admin",
   isAdmin: true,
   createdAt: new Date(0).toISOString(),
@@ -432,11 +432,12 @@ declare global {
 }
 
 function ensureUserStats(user: Partial<DBUser>): DBUser {
+  const legacyPassword = (user as Partial<DBUser> & { password?: string }).password;
   return {
     id: user.id ?? "",
     name: user.name ?? "",
     email: user.email ?? "",
-    password: user.password ?? "",
+    passwordHash: user.passwordHash ?? legacyPassword ?? "",
     role: user.role ?? "office",
     isAdmin: user.isAdmin ?? false,
     createdAt: user.createdAt ?? new Date().toISOString(),
@@ -457,6 +458,61 @@ function ensureUserStats(user: Partial<DBUser>): DBUser {
     activeDashboardTheme: user.activeDashboardTheme ?? null,
     activeNameStyle: user.activeNameStyle ?? null,
   };
+}
+
+const HASH_PREFIX = "scrypt";
+
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.randomBytes(16);
+  const key = await new Promise<Buffer>((resolve, reject) => {
+    crypto.scrypt(password, salt, 64, (error, derivedKey) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(derivedKey as Buffer);
+    });
+  });
+  return `${HASH_PREFIX}$${salt.toString("hex")}$${key.toString("hex")}`;
+}
+
+export async function verifyPassword(password: string, passwordHash: string): Promise<boolean> {
+  const [prefix, saltHex, keyHex] = passwordHash.split("$");
+  if (prefix !== HASH_PREFIX || !saltHex || !keyHex) return false;
+
+  const salt = Buffer.from(saltHex, "hex");
+  const key = Buffer.from(keyHex, "hex");
+  const testKey = await new Promise<Buffer>((resolve, reject) => {
+    crypto.scrypt(password, salt, key.length, (error, derivedKey) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(derivedKey as Buffer);
+    });
+  });
+
+  if (testKey.length !== key.length) return false;
+  return crypto.timingSafeEqual(testKey, key);
+}
+
+async function migrateLegacyPasswords(db: DBShape): Promise<boolean> {
+  let hasChanges = false;
+  for (const user of db.users as Array<DBUser & { password?: string }>) {
+    if (typeof user.password === "string") {
+      user.passwordHash = await hashPassword(user.password);
+      delete user.password;
+      hasChanges = true;
+      continue;
+    }
+
+    if (!user.passwordHash) {
+      user.passwordHash = await hashPassword(crypto.randomUUID());
+      hasChanges = true;
+    }
+  }
+
+  return hasChanges;
 }
 
 function ensureConfig(config?: Partial<DBConfig>): DBConfig {
@@ -547,6 +603,8 @@ export async function readDB(): Promise<DBShape> {
   const kvData = await readFromVercelKV();
   if (kvData) {
     const parsed = ensureAdmin(kvData);
+    const migrated = await migrateLegacyPasswords(parsed);
+    if (migrated) await writeDB(parsed);
     global.__blablaDBCache = parsed;
     return parsed;
   }
@@ -554,6 +612,8 @@ export async function readDB(): Promise<DBShape> {
   try {
     const raw = await fs.readFile(dbPath, "utf-8");
     const parsed = ensureAdmin(JSON.parse(raw) as DBShape);
+    const migrated = await migrateLegacyPasswords(parsed);
+    if (migrated) await writeDB(parsed);
     global.__blablaDBCache = parsed;
     return parsed;
   } catch {
