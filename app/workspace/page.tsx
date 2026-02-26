@@ -17,6 +17,7 @@ import { I18N, TAB_LABELS, type Locale, type Tab } from "./utils/i18n";
 import { getActiveTabClass, getNameStyleClass, getThemeClasses } from "./utils/theme";
 
 const SESSION_TOKEN_KEY = "blabla-session-token";
+const COMMUNITY_POLL_INTERVAL_MS = 2500;
 const SEED_OPTIONS: SeedSpec[] = [
   { id: "seed-basic", name: "Hạt cải", price: 50, reward: 150, growHours: 8 },
   { id: "seed-sun", name: "Hạt hướng dương", price: 120, reward: 380, growHours: 12 },
@@ -240,6 +241,24 @@ export default function WorkspacePage() {
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [activeTab, posts]);
+
+  useEffect(() => {
+    if (activeTab !== "community" || typeof document === "undefined") return;
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadPosts();
+    };
+
+    const timer = setInterval(refreshWhenVisible, COMMUNITY_POLL_INTERVAL_MS);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    refreshWhenVisible();
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [activeTab, loadPosts]);
 
   useEffect(() => {
     if (activeTab !== "garden") return;
