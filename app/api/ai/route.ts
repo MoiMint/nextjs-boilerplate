@@ -4,7 +4,8 @@ type GeminiGenerateResponse = {
   candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
 };
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+const PRIMARY_MODEL = "gemini-2.5-flash";
+const FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"];
 const RETRYABLE_STATUS = new Set([429, 500, 503]);
 
 type CallModelResult =
@@ -77,11 +78,12 @@ function heuristicScore(input: string) {
 async function callModel(args: {
   apiKey: string;
   apiVersion: "v1beta" | "v1";
+  model: string;
   prompt: string;
   responseMimeType?: string;
 }): Promise<CallModelResult> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/${args.apiVersion}/models/${GEMINI_MODEL}:generateContent?key=${args.apiKey}`,
+    `https://generativelanguage.googleapis.com/${args.apiVersion}/models/${args.model}:generateContent?key=${args.apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -109,25 +111,29 @@ async function runGemini(args: {
   responseMimeType?: string;
 }) {
   const apiVersions: Array<"v1beta" | "v1"> = ["v1beta", "v1"];
+  const modelCandidates = [PRIMARY_MODEL, ...FALLBACK_MODELS];
   const errors: string[] = [];
 
-  for (const apiVersion of apiVersions) {
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      const result = await callModel({
-        apiKey: args.apiKey,
-        apiVersion,
-        prompt: args.prompt,
-        responseMimeType: args.responseMimeType,
-      });
+  for (const model of modelCandidates) {
+    for (const apiVersion of apiVersions) {
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        const result = await callModel({
+          apiKey: args.apiKey,
+          apiVersion,
+          model,
+          prompt: args.prompt,
+          responseMimeType: args.responseMimeType,
+        });
 
-      if (result.ok) {
-        return { ok: true as const, text: result.text, model: GEMINI_MODEL, apiVersion };
+        if (result.ok) {
+          return { ok: true as const, text: result.text, model, apiVersion };
+        }
+
+        errors.push(`${apiVersion}/${model} [${result.status}]#${attempt}`);
+
+        if (!RETRYABLE_STATUS.has(result.status)) break;
+        if (attempt < 3) await wait(250 * attempt);
       }
-
-      errors.push(`${apiVersion}/${GEMINI_MODEL} [${result.status}]#${attempt}`);
-
-      if (!RETRYABLE_STATUS.has(result.status)) break;
-      if (attempt < 3) await wait(250 * attempt);
     }
   }
 
@@ -151,7 +157,7 @@ export async function POST(request: NextRequest) {
       const generatorPrompt = `Bạn là AI thực thi prompt cho nền tảng Blabla.\nContext: ${context ?? "General"}\nYêu cầu bắt buộc: trả lời ngắn gọn, rõ ý, đi thẳng vào kết quả; không lan man.\n\nPrompt người dùng:\n${prompt}`;
       const result = await runGemini({ apiKey, prompt: generatorPrompt });
       if (!result.ok) {
-        return NextResponse.json({ error: `Không gọi được Gemini 2.5 Flash để tạo nội dung. Chi tiết: ${result.error}` }, { status: 502 });
+        return NextResponse.json({ error: `Không gọi được Gemini khả dụng để tạo nội dung. Chi tiết: ${result.error}` }, { status: 502 });
       }
 
       return NextResponse.json({ output: normalizeFeedback(result.text, "Không có nội dung."), model: result.model, apiVersion: result.apiVersion });
@@ -161,7 +167,7 @@ export async function POST(request: NextRequest) {
 
     const result = await runGemini({ apiKey, prompt: userPrompt, responseMimeType: "application/json" });
     if (!result.ok) {
-      return NextResponse.json({ error: `Không gọi được Gemini 2.5 Flash. Chi tiết: ${result.error}` }, { status: 502 });
+      return NextResponse.json({ error: `Không gọi được Gemini khả dụng. Chi tiết: ${result.error}` }, { status: 502 });
     }
 
     const parsed = extractJsonObject(result.text);
