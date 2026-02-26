@@ -70,8 +70,11 @@ async function runGemini(args: { apiKey: string; prompt: string; responseMimeTyp
 
       errors.push(`${apiVersion}/${model} [${result.status}]`);
 
+      // Keep trying the other API version/model even when one call returns
+      // 400/404 because model availability and request validation can differ
+      // between v1beta and v1.
       if (result.status === 400 || result.status === 404) {
-        break;
+        continue;
       }
 
       if (result.status === 429) {
@@ -84,6 +87,28 @@ async function runGemini(args: { apiKey: string; prompt: string; responseMimeTyp
   }
 
   return { ok: false as const, error: errors.join(" | ") };
+}
+
+function parseJudgeResult(text: string) {
+  const trimmed = text.trim();
+
+  const direct = (() => {
+    try {
+      return JSON.parse(trimmed) as { score?: number; feedback?: string };
+    } catch {
+      return null;
+    }
+  })();
+  if (direct) return direct;
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+  if (!fenced) return null;
+
+  try {
+    return JSON.parse(fenced) as { score?: number; feedback?: string };
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -140,7 +165,11 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const parsed = JSON.parse(result.text) as { score?: number; feedback?: string };
+      const parsed = parseJudgeResult(result.text);
+      if (!parsed) {
+        return NextResponse.json({ score: 70, feedback: result.text, model: result.model, apiVersion: result.apiVersion });
+      }
+
       return NextResponse.json({
         score: parsed.score ?? 70,
         feedback: parsed.feedback ?? "Không có feedback.",
