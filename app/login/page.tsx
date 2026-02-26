@@ -43,8 +43,7 @@ export default function LoginPage() {
         <div className="mt-3">
           <Link href="/" className="text-sm font-medium text-slate-300 hover:text-cyan-300">← Quay lại trang chủ</Link>
         </div>
-        <p className="mt-1 text-xs text-amber-300">Admin mặc định: admin@blabla.ai / 123456</p>
-
+        
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-white/15 bg-slate-800 px-3 py-2" placeholder="Email" />
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-lg border border-white/15 bg-slate-800 px-3 py-2" placeholder="Mật khẩu" />

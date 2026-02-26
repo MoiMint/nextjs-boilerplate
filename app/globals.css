@@ -14,6 +14,10 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   background: var(--background);
@@ -54,4 +58,14 @@ body {
   background: linear-gradient(180deg, #22d3ee, #0284c7);
   border-radius: 999px;
   border: 2px solid #0f172a;
+}
+
+
+.neon-frame {
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.55), 0 0 22px rgba(168, 85, 247, 0.35), inset 0 0 10px rgba(34, 211, 238, 0.2);
+}
+
+.neon-chip {
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.4);
+  border-color: rgba(34, 211, 238, 0.5);
 }

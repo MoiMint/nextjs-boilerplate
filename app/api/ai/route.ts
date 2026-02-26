@@ -1,74 +1,85 @@
 import { NextRequest, NextResponse } from "next/server";
 
-type GeminiListModelsResponse = {
-  models?: Array<{
-    name?: string;
-    supportedGenerationMethods?: string[];
-  }>;
-};
-
 type GeminiGenerateResponse = {
   candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  error?: { code?: number; message?: string; status?: string };
 };
 
 function normalizeModelName(name: string) {
   return name.startsWith("models/") ? name.replace("models/", "") : name;
 }
 
-async function fetchAvailableModels(apiKey: string) {
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
-    method: "GET",
-  });
+const DISABLED_MODEL_HINTS = ["tts", "image", "embedding", "vision"];
 
-  if (!response.ok) return [] as string[];
+function parseEnvModels() {
+  return (process.env.GEMINI_MODELS ?? "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash")
+    .split(",")
+    .map((m) => normalizeModelName(m.trim()))
+    .filter(Boolean)
+    .filter((m) => !DISABLED_MODEL_HINTS.some((hint) => m.toLowerCase().includes(hint)));
+}
 
-  const data = (await response.json()) as GeminiListModelsResponse;
-  return (data.models ?? [])
-    .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
-    .map((m) => normalizeModelName(m.name ?? ""))
-    .filter(Boolean);
+async function callModel(args: {
+  apiKey: string;
+  apiVersion: "v1beta" | "v1";
+  model: string;
+  prompt: string;
+  responseMimeType?: string;
+}) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/${args.apiVersion}/models/${args.model}:generateContent?key=${args.apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: args.prompt }] }],
+        generationConfig: args.responseMimeType ? { responseMimeType: args.responseMimeType } : undefined,
+      }),
+    },
+  );
+
+  if (response.ok) {
+    const data = (await response.json()) as GeminiGenerateResponse;
+    return { ok: true as const, text: data.candidates?.[0]?.content?.parts?.[0]?.text ?? "" };
+  }
+
+  const status = response.status;
+  const errorText = await response.text();
+  return { ok: false as const, status, errorText };
 }
 
 async function runGemini(args: { apiKey: string; prompt: string; responseMimeType?: string }) {
-  const envModels = (process.env.GEMINI_MODELS ?? "gemini-2.0-flash,gemini-1.5-flash-latest,gemini-1.5-flash")
-    .split(",")
-    .map((m) => normalizeModelName(m.trim()))
-    .filter(Boolean);
-
-  const availableModels = await fetchAvailableModels(args.apiKey);
-
-  const modelCandidates = [
-    ...envModels.filter((m) => availableModels.includes(m)),
-    ...envModels.filter((m) => !availableModels.includes(m)),
-    ...availableModels,
-  ].filter((m, i, arr) => arr.indexOf(m) === i);
-
+  const envModels = parseEnvModels();
+  const modelCandidates = envModels.length ? envModels.slice(0, 4) : ["gemini-2.5-flash", "gemini-2.0-flash"];
+  const apiVersions: Array<"v1beta" | "v1"> = ["v1beta", "v1"];
   const errors: string[] = [];
-  const apiVersions = ["v1beta", "v1"];
 
   for (const model of modelCandidates) {
     for (const apiVersion of apiVersions) {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${args.apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: args.prompt }] }],
-            generationConfig: args.responseMimeType ? { responseMimeType: args.responseMimeType } : undefined,
-          }),
-        },
-      );
+      const result = await callModel({
+        apiKey: args.apiKey,
+        apiVersion,
+        model,
+        prompt: args.prompt,
+        responseMimeType: args.responseMimeType,
+      });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        errors.push(`${apiVersion}/${model}: ${errorText}`);
-        continue;
+      if (result.ok) {
+        return { ok: true as const, text: result.text, model, apiVersion };
       }
 
-      const data = (await response.json()) as GeminiGenerateResponse;
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-      return { ok: true as const, text: rawText, model, apiVersion };
+      errors.push(`${apiVersion}/${model} [${result.status}]`);
+
+      if (result.status === 400 || result.status === 404) {
+        break;
+      }
+
+      if (result.status === 429) {
+        return {
+          ok: false as const,
+          error: `Gemini rate limit (429). Stop retry to avoid spam requests. Attempts: ${errors.join(", ")}`,
+        };
+      }
     }
   }
 

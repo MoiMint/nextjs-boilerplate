@@ -30,6 +30,27 @@ KV_REST_API_TOKEN=
 - Khi có 2 biến này, app sẽ ưu tiên lưu toàn bộ DB vào KV thay vì file local.
 - Điều này giúp tránh mất dữ liệu/sess/chat khi Vercel scale hoặc restart instance.
 
+
+### Persistence checklist để KHÔNG mất dữ liệu
+1. **Production bắt buộc nên dùng Vercel KV** (Upstash):
+   - `KV_REST_API_URL`
+   - `KV_REST_API_TOKEN`
+2. Vào Vercel Project → **Settings → Environment Variables** và set đủ 2 biến trên cho môi trường `Production` (và `Preview` nếu cần).
+3. Redeploy sau khi set env.
+4. Kiểm tra nhanh bằng cách:
+   - đăng ký user hoặc gửi vài chat ở Community,
+   - refresh trang / redeploy,
+   - xác nhận dữ liệu vẫn còn.
+
+> Cơ chế hiện tại: `app/lib/server-db.ts` sẽ **ưu tiên đọc/ghi KV**. Nếu không có KV, app mới fallback file `data/db.json` (chỉ phù hợp local dev, không đảm bảo bền vững trên serverless production).
+
+### Dữ liệu chat cộng đồng được lưu ở đâu?
+- Tin nhắn community được lưu vào `posts` trong DB chung (`blabla_db`).
+- API chat:
+  - `POST /api/posts`: gửi tin nhắn.
+  - `GET /api/posts`: lấy 50 tin nhắn mới nhất.
+- UI Community Chat tự polling 2 giây/lần để người dùng thấy tin nhắn của nhau gần realtime.
+
 ## 3) Chạy local
 
 ```bash

@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type User = {
@@ -16,11 +16,46 @@ type User = {
   loginStreak?: number;
   lastLoginDate?: string | null;
   stats?: { historyCount: number; postCount: number; lastSessionAt: string | null };
+  coins?: number;
+  unlockedLessonIds?: string[];
+  ownedItemIds?: string[];
+  farmPlot?: {
+    seedType: string | null;
+    plantedAt: string | null;
+    wateredAt: string | null;
+    readyAt: string | null;
+    lastHarvestAt: string | null;
+  };
+  activeDashboardTheme?: string | null;
+  activeNameStyle?: string | null;
 };
 
 type HistoryItem = { id: string; type?: "master" | "arena" | "auditor"; title: string; score: number; feedback: string; createdAt: string };
-type Post = { id: string; userName: string; content: string; createdAt: string };
-type Tab = "dashboard" | "promptmaster" | "arena" | "auditor" | "history" | "community" | "admin";
+type Post = {
+  id: string;
+  userName: string;
+  content: string;
+  createdAt: string;
+  userRole?: string;
+  activeNameStyle?: string | null;
+  type?: "message" | "coin-gift" | "system";
+  gift?: {
+    totalCoins: number;
+    maxReceivers: number;
+    perReceiver: number;
+    claimedUserIds: string[];
+    creatorUserName: string;
+  };
+};
+
+type FeedbackItem = {
+  id: string;
+  userId: string;
+  userName: string;
+  message: string;
+  createdAt: string;
+};
+type Tab = "dashboard" | "promptmaster" | "arena" | "auditor" | "history" | "community" | "garden" | "admin";
 type PromptMasterLesson = {
   id: string;
   title: string;
@@ -30,7 +65,31 @@ type PromptMasterLesson = {
   methodGuide: string;
   practiceChallenge: string;
   samplePrompt: string;
+  price?: number;
+  approved?: boolean;
+  pendingApproval?: boolean;
+  createdByUserId?: string;
 };
+
+type ShopItem = {
+  id: string;
+  name: string;
+  image: string;
+  price: number;
+  effect: string;
+  category?: "dashboard-theme" | "dashboard-decoration" | "garden-decoration" | "name-style";
+  themeKey?: string | null;
+  nameStyleKey?: string | null;
+};
+type CourseSubmission = {
+  id: string;
+  title: string;
+  topic: string;
+  creatorName: string;
+  status: "pending";
+};
+
+type SeedSpec = { id: string; name: string; price: number; reward: number; growHours: number };
 
 type ArenaWeekly = {
   weekLabel: string;
@@ -45,30 +104,156 @@ type AuditorScenario = {
   requiredIssues: string[];
 };
 
+type ArenaWeeklyReward = {
+  rank: number;
+  coins: number;
+};
+
 type AppConfig = {
   promptMasterLessons: PromptMasterLesson[];
   arenaWeekly: ArenaWeekly;
   auditorScenario: AuditorScenario;
   auditorScenarios?: AuditorScenario[];
+  arenaWeeklyRewards?: ArenaWeeklyReward[];
+  shopItems: ShopItem[];
+  courseSubmissions: CourseSubmission[];
+  createCourseFee: number;
 };
 
+type Locale = "vi" | "en";
+
+const TAB_LABELS: Record<Locale, Record<Tab, string>> = {
+  vi: {
+    dashboard: "Bảng điều khiển",
+    promptmaster: "Prompt Master",
+    arena: "Arena",
+    auditor: "Auditor",
+    history: "Lịch sử",
+    community: "Cộng đồng",
+    garden: "Khu vườn",
+    admin: "Quản trị",
+  },
+  en: {
+    dashboard: "Dashboard",
+    promptmaster: "Prompt Master",
+    arena: "Arena",
+    auditor: "Auditor",
+    history: "History",
+    community: "Community",
+    garden: "Garden",
+    admin: "Admin",
+  },
+};
+
+const I18N = {
+  vi: {
+    shopTitle: "Cửa hàng Dashboard",
+    shopDesc: "Mua vật phẩm để trang trí dashboard hoặc cho khu vườn.",
+    ownedTitle: "Vật phẩm trang trí đang sở hữu",
+    buy: "Mua",
+    sell: "Bán",
+    useTheme: "Dùng chủ đề",
+    noItems: "Bạn chưa có vật phẩm trang trí nào.",
+    gardenOwned: "Trang trí vườn đang sở hữu",
+    learn: "Học",
+    close: "Đóng",
+    progress: "Tiến độ",
+    step: "Bước",
+    step1Title: "Bước 1 - Thực trạng & bối cảnh",
+    step2Title: "Bước 2 - Phương pháp viết prompt",
+    step3Title: "Bước 3 - Thực hành & chấm điểm",
+    continueStep2: "Tiếp tục bước 2",
+    continueStep3: "Tiếp tục bước 3",
+    evaluating: "AI đang chấm...",
+    gradePromptMaster: "Chấm Prompt Master",
+    adminDeleteItem: "Xóa vật phẩm",
+    logout: "Đăng xuất",
+    feedback: "Gửi feedback",
+    send: "Gửi",
+    sending: "Đang gửi...",
+    feedbackPlaceholder: "Góp ý của bạn cho admin...",
+    feedbackSent: "Đã gửi feedback tới admin.",
+    feedbackListTitle: "Feedback người dùng",
+    noFeedback: "Chưa có feedback.",
+    deleteFeedback: "Xóa feedback",
+    viewDetail: "Xem chi tiết",
+    closeModal: "Đóng",
+    deleteAccount: "Xóa tài khoản",
+    refreshAuditor: "Làm mới đề ngẫu nhiên",
+    contactTitle: "Liên hệ đại diện",
+    contactPhone: "Số điện thoại liên hệ (đại diện): 0352358392",
+    contactEmail: "Email (đại diện): ducnmfhl31907@gmail.com",
+  },
+  en: {
+    shopTitle: "Dashboard Shop",
+    shopDesc: "Buy items to decorate your dashboard or garden.",
+    ownedTitle: "Owned decorations",
+    buy: "Buy",
+    sell: "Sell",
+    useTheme: "Apply theme",
+    noItems: "You do not own any decorations yet.",
+    gardenOwned: "Owned garden decorations",
+    learn: "Learn",
+    close: "Close",
+    progress: "Progress",
+    step: "Step",
+    step1Title: "Step 1 - Context",
+    step2Title: "Step 2 - Prompt method",
+    step3Title: "Step 3 - Practice & scoring",
+    continueStep2: "Continue to step 2",
+    continueStep3: "Continue to step 3",
+    evaluating: "AI is grading...",
+    gradePromptMaster: "Grade Prompt Master",
+    adminDeleteItem: "Delete item",
+    logout: "Logout",
+    feedback: "Send feedback",
+    send: "Send",
+    sending: "Sending...",
+    feedbackPlaceholder: "Share your feedback to admin...",
+    feedbackSent: "Feedback sent to admin.",
+    feedbackListTitle: "User feedback",
+    noFeedback: "No feedback yet.",
+    deleteFeedback: "Delete feedback",
+    viewDetail: "View details",
+    closeModal: "Close",
+    deleteAccount: "Delete account",
+    refreshAuditor: "Refresh random scenario",
+    contactTitle: "Representative contact",
+    contactPhone: "Contact phone (representative): 0352358392",
+    contactEmail: "Email (representative): ducnmfhl31907@gmail.com",
+  },
+} as const;
+
 const SESSION_TOKEN_KEY = "blabla-session-token";
+const SEED_OPTIONS: SeedSpec[] = [
+  { id: "seed-basic", name: "Hạt cải", price: 50, reward: 150, growHours: 8 },
+  { id: "seed-sun", name: "Hạt hướng dương", price: 120, reward: 380, growHours: 12 },
+  { id: "seed-moon", name: "Hạt ánh trăng", price: 240, reward: 820, growHours: 20 },
+];
 
 export default function WorkspacePage() {
   const router = useRouter();
   const [me, setMe] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
-  const [loading, setLoading] = useState(false);
+  const [locale, setLocale] = useState<Locale>("vi");
+  const [masterLoading, setMasterLoading] = useState(false);
+  const [arenaLoading, setArenaLoading] = useState(false);
+  const [auditorLoading, setAuditorLoading] = useState(false);
 
   const [histories, setHistories] = useState<HistoryItem[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
 
   const [selectedLessonId, setSelectedLessonId] = useState<string>("");
   const [masterPrompt, setMasterPrompt] = useState("");
   const [masterResult, setMasterResult] = useState<string>("");
+  const [learningLessonId, setLearningLessonId] = useState<string>("");
+  const [lessonStep, setLessonStep] = useState<1 | 2 | 3>(1);
+  const [step1Reflection, setStep1Reflection] = useState("");
+  const [step2DraftPrompt, setStep2DraftPrompt] = useState("");
 
   const [arenaPrompt, setArenaPrompt] = useState("");
   const [arenaResult, setArenaResult] = useState<string>("");
@@ -82,6 +267,11 @@ export default function WorkspacePage() {
   const [activeAuditorScenario, setActiveAuditorScenario] = useState<AuditorScenario | null>(null);
 
   const [communityInput, setCommunityInput] = useState("");
+  const [communitySending, setCommunitySending] = useState(false);
+  const [communityError, setCommunityError] = useState("");
+  const [giftCoinAmount, setGiftCoinAmount] = useState(100);
+  const [giftReceiverLimit, setGiftReceiverLimit] = useState(5);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
@@ -101,6 +291,34 @@ export default function WorkspacePage() {
   const [newArenaInput, setNewArenaInput] = useState("");
   const [newArenaGolden, setNewArenaGolden] = useState("");
 
+  const [shopMsg, setShopMsg] = useState("");
+  const [gardenMsg, setGardenMsg] = useState("");
+  const [nowTick, setNowTick] = useState(0);
+  const [courseCreateTitle, setCourseCreateTitle] = useState("");
+  const [courseCreateTopic, setCourseCreateTopic] = useState("");
+  const [courseCreateSituation, setCourseCreateSituation] = useState("");
+  const [courseCreateOverview, setCourseCreateOverview] = useState("");
+  const [courseCreateMethod, setCourseCreateMethod] = useState("");
+  const [courseCreatePractice, setCourseCreatePractice] = useState("");
+  const [courseCreateSample, setCourseCreateSample] = useState("");
+  const [shopItemName, setShopItemName] = useState("");
+  const [shopItemImage, setShopItemImage] = useState("🌱");
+  const [shopItemPrice, setShopItemPrice] = useState(80);
+  const [shopItemEffect, setShopItemEffect] = useState("Trang trí dashboard");
+  const [shopItemCategory, setShopItemCategory] = useState<"dashboard-theme" | "dashboard-decoration" | "garden-decoration">("dashboard-decoration");
+  const [shopItemThemeKey, setShopItemThemeKey] = useState<"pink" | "ocean" | "violet" | "none">("none");
+  const [coursePriceDraft, setCoursePriceDraft] = useState<Record<string, number>>({});
+  const [selectedSeed, setSelectedSeed] = useState<string>("seed-basic");
+  const [gameActionLoading, setGameActionLoading] = useState(false);
+  const [lessonMenuId, setLessonMenuId] = useState<string>("");
+  const [lessonEditDraft, setLessonEditDraft] = useState<PromptMasterLesson | null>(null);
+  const [showLearningModal, setShowLearningModal] = useState(false);
+  const [harvestFxActive, setHarvestFxActive] = useState(false);
+  const [feedbackInput, setFeedbackInput] = useState("");
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackMsg, setFeedbackMsg] = useState("");
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+
   const token = typeof window !== "undefined" ? localStorage.getItem(SESSION_TOKEN_KEY) : null;
   const authHeaders = useMemo(
     () => ({ "Content-Type": "application/json", "x-session-token": token ?? "" }),
@@ -111,6 +329,29 @@ export default function WorkspacePage() {
     () => config?.promptMasterLessons.find((l) => l.id === selectedLessonId) ?? config?.promptMasterLessons[0],
     [config, selectedLessonId],
   );
+
+  const playUiSound = (frequency = 520) => {
+    if (typeof window === "undefined") return;
+    try {
+      const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = frequency;
+      gainNode.gain.value = 0.04;
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      oscillator.start();
+      oscillator.stop(ctx.currentTime + 0.08);
+      oscillator.onended = () => void ctx.close();
+    } catch {
+      // no audio device or blocked by browser
+    }
+  };
+
+  const isLearningSelectedLesson = !!selectedLesson && learningLessonId === selectedLesson.id;
 
   const loadMe = useCallback(async () => {
     const res = await fetch("/api/me", { headers: { "x-session-token": token ?? "" } });
@@ -135,6 +376,13 @@ export default function WorkspacePage() {
     setPosts(data.posts);
   }, []);
 
+  const formatChatTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+
+  const refreshCommunity = useCallback(async () => {
+    await loadPosts();
+  }, [loadPosts]);
+
   const loadUsers = useCallback(async () => {
     const res = await fetch("/api/admin/users", { headers: { "x-session-token": token ?? "" } });
     if (!res.ok) return;
@@ -142,18 +390,21 @@ export default function WorkspacePage() {
     setAllUsers(data.users);
   }, [token]);
 
+  const loadFeedbacks = useCallback(async () => {
+    const res = await fetch("/api/feedback", { headers: { "x-session-token": token ?? "" } });
+    if (!res.ok) return;
+    const data = (await res.json()) as { feedbacks: FeedbackItem[] };
+    setFeedbacks(data.feedbacks);
+  }, [token]);
+
   const loadConfig = useCallback(async () => {
-    const res = await fetch("/api/config");
+    const res = await fetch("/api/config", { headers: { "x-session-token": token ?? "" } });
     if (!res.ok) return;
     const data = (await res.json()) as { config: AppConfig };
     setConfig(data.config);
-    if (!selectedLessonId && data.config.promptMasterLessons.length) {
-      setSelectedLessonId(data.config.promptMasterLessons[0].id);
-    }
-    if (!activeAuditorScenario) {
-      setActiveAuditorScenario(data.config.auditorScenarios?.[0] ?? data.config.auditorScenario ?? null);
-    }
-  }, [activeAuditorScenario, selectedLessonId]);
+    setSelectedLessonId((prev) => prev || data.config.promptMasterLessons[0]?.id || "");
+    setActiveAuditorScenario((prev) => prev ?? data.config.auditorScenarios?.[0] ?? data.config.auditorScenario ?? null);
+  }, [token]);
 
   const loadLeaderboard = useCallback(async () => {
     const res = await fetch("/api/arena/leaderboard");
@@ -179,18 +430,74 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (me?.isAdmin) {
       loadUsers();
+      loadFeedbacks();
     }
-  }, [me, loadUsers]);
+  }, [me, loadUsers, loadFeedbacks]);
 
   useEffect(() => {
     if (!token) return;
     const timer = setInterval(() => {
-      void loadPosts();
       void loadLeaderboard();
-    }, 3000);
+    }, 4000);
 
     return () => clearInterval(timer);
-  }, [token, loadPosts, loadLeaderboard]);
+  }, [token, loadLeaderboard]);
+
+  useEffect(() => {
+    if (activeTab !== "community") return;
+    const el = chatContainerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [activeTab, posts]);
+
+  useEffect(() => {
+    if (activeTab !== "garden") return;
+    const timer = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = localStorage.getItem("blabla-lesson-progress");
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        learningLessonId?: string;
+        lessonStep?: 1 | 2 | 3;
+        step1Reflection?: string;
+        step2DraftPrompt?: string;
+        masterPrompt?: string;
+      };
+      if (parsed.learningLessonId) setLearningLessonId(parsed.learningLessonId);
+      if (parsed.lessonStep) setLessonStep(parsed.lessonStep);
+      if (parsed.step1Reflection) setStep1Reflection(parsed.step1Reflection);
+      if (parsed.step2DraftPrompt) setStep2DraftPrompt(parsed.step2DraftPrompt);
+      if (parsed.masterPrompt) setMasterPrompt(parsed.masterPrompt);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(
+      "blabla-lesson-progress",
+      JSON.stringify({ learningLessonId, lessonStep, step1Reflection, step2DraftPrompt, masterPrompt }),
+    );
+  }, [learningLessonId, lessonStep, step1Reflection, step2DraftPrompt, masterPrompt]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const savedLocale = window.localStorage.getItem("blabla-locale");
+    if (savedLocale === "vi" || savedLocale === "en") setLocale(savedLocale);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("blabla-locale", locale);
+  }, [locale]);
+
+  const text = I18N[locale];
 
   const avgScore = histories.length
     ? Math.round(histories.reduce((sum, item) => sum + item.score, 0) / histories.length)
@@ -204,10 +511,44 @@ export default function WorkspacePage() {
   const communityPosts = posts.length;
   const topArena = leaderboard[0];
   const myArenaRank = me ? leaderboard.findIndex((entry) => entry.userName === me.name) + 1 : 0;
+  const arenaWeekTitle = config ? `Arena tuần: ${config.arenaWeekly.weekLabel}` : "";
+  const alreadySubmittedArena = !!histories.find((item) => item.type === "arena" && item.title === arenaWeekTitle);
+  const readyAt = me?.farmPlot?.readyAt ? new Date(me.farmPlot.readyAt).getTime() : 0;
+  const remainMs = readyAt ? Math.max(0, readyAt - nowTick) : 0;
+  const remainSec = Math.ceil(remainMs / 1000);
+  const ownedDecorations = (config?.shopItems ?? []).filter((item) => (me?.ownedItemIds ?? []).includes(item.id));
+  const ownedThemes = ownedDecorations.filter((item) => item.category === "dashboard-theme" && item.themeKey);
+  const ownedDashboardDecorations = ownedDecorations.filter((item) => item.category === "dashboard-decoration");
+  const ownedGardenDecorations = ownedDecorations.filter((item) => item.category === "garden-decoration");
+  const hasNeonFrame = (me?.ownedItemIds ?? []).includes("item-neon-frame");
+  const activeTheme = me?.activeDashboardTheme ?? null;
+
+  const themeClass = activeTheme === "pink"
+    ? "border-pink-300/55 bg-pink-900/30"
+    : activeTheme === "ocean"
+      ? "border-cyan-300/55 bg-cyan-900/30"
+      : activeTheme === "violet"
+        ? "border-violet-300/55 bg-violet-900/30"
+        : "border-white/10 bg-slate-900";
+  const appThemeClass = activeTheme === "pink"
+    ? "from-pink-500/16 via-rose-500/10 to-slate-950"
+    : activeTheme === "ocean"
+      ? "from-cyan-500/16 via-blue-500/10 to-slate-950"
+      : activeTheme === "violet"
+        ? "from-violet-500/16 via-fuchsia-500/10 to-slate-950"
+        : "from-slate-900 via-slate-900 to-slate-950";
+  const panelClass = `tab-panel rounded-2xl border p-5 ${themeClass} ${hasNeonFrame ? "neon-frame" : ""}`;
+
+  const nameStyleClass = (styleKey?: string | null) => {
+    if (styleKey === "rainbow") return "bg-gradient-to-r from-pink-300 via-cyan-300 to-yellow-200 bg-[length:200%_200%] bg-clip-text text-transparent animate-pulse";
+    if (styleKey === "fire") return "bg-gradient-to-r from-rose-400 via-orange-300 to-amber-200 bg-[length:200%_200%] bg-clip-text text-transparent animate-pulse";
+    if (styleKey === "ocean") return "bg-gradient-to-r from-cyan-300 via-blue-300 to-indigo-300 bg-[length:200%_200%] bg-clip-text text-transparent animate-pulse";
+    return "text-slate-100";
+  };
 
   const submitPromptMaster = async () => {
     if (!selectedLesson) return;
-    setLoading(true);
+    setMasterLoading(true);
 
     const aiRunPrompt = `Nhiệm vụ thực hành: ${selectedLesson.practiceChallenge}
 
@@ -281,17 +622,14 @@ Nhiệm vụ: tự kiểm tra output AI và phản hồi reviewer đã bám yêu
     });
 
     await loadHistories();
-    setMasterResult(`AI tạo output: ${generatedOutput}
-
-Reviewer: ${reviewerFeedback}
-
-Điểm cuối: ${score}% | Tổng kết: ${finalFeedback}`);
-    setLoading(false);
+    await loadMe();
+    setMasterResult(`AI tạo output: ${generatedOutput}\n\nReviewer: ${reviewerFeedback}\n\nĐiểm cuối: ${score}% | Tổng kết: ${finalFeedback}\n\n+40 Endless Coin`);
+    setMasterLoading(false);
   };
 
   const submitArena = async () => {
     if (!config) return;
-    setLoading(true);
+    setArenaLoading(true);
 
     const solvePrompt = `Bài toán Arena: ${config.arenaWeekly.title}
 Input chuẩn: ${config.arenaWeekly.inputText}
@@ -307,7 +645,7 @@ ${arenaPrompt}`;
 
     if (!generatedOutput) {
       setArenaResult(solveData.error ?? "AI không tạo được output cho Arena.");
-      setLoading(false);
+      setArenaLoading(false);
       return;
     }
 
@@ -333,7 +671,7 @@ Hãy tự đánh giá output có khớp yêu cầu chưa, nêu đúng/sai ngắn
 
     if (!res.ok) {
       setArenaResult(data.error ?? "Nộp Arena thất bại.");
-      setLoading(false);
+      setArenaLoading(false);
       return;
     }
 
@@ -346,7 +684,9 @@ Accuracy: ${data.accuracy}% | Tokens: ${data.tokens} | Efficiency: ${data.effici
     );
     await loadLeaderboard();
     await loadHistories();
-    setLoading(false);
+    await loadMe();
+    setArenaResult((prev) => `${prev}\n\n+35 Endless Coin`);
+    setArenaLoading(false);
   };
 
   const randomizeAuditorScenario = () => {
@@ -362,7 +702,7 @@ Accuracy: ${data.accuracy}% | Tokens: ${data.tokens} | Efficiency: ${data.effici
   const submitAuditor = async () => {
     const scenario = activeAuditorScenario ?? config?.auditorScenario;
     if (!scenario) return;
-    setLoading(true);
+    setAuditorLoading(true);
 
     const correctedAnswerPrompt = `Bạn đang sửa câu trả lời AI bị sai.
 Câu sai ban đầu:
@@ -408,21 +748,70 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     });
 
     await loadHistories();
-    setAuditorResult(`AI trả lời sau khi sửa: ${correctedAnswer}
-
-Điểm: ${score}% | Nhận xét: ${feedback}`);
-    setLoading(false);
+    await loadMe();
+    setAuditorResult(`AI trả lời sau khi sửa: ${correctedAnswer}\n\nĐiểm: ${score}% | Nhận xét: ${feedback}\n\n+30 Endless Coin`);
+    setAuditorLoading(false);
   };
 
   const postCommunity = async () => {
-    if (!communityInput.trim()) return;
-    await fetch("/api/posts", {
+    if (!communityInput.trim() || communitySending) return;
+    setCommunitySending(true);
+    setCommunityError("");
+
+    const res = await fetch("/api/posts", {
       method: "POST",
       headers: authHeaders,
       body: JSON.stringify({ content: communityInput }),
     });
+    const data = (await res.json()) as { error?: string };
+
+    if (!res.ok) {
+      setCommunityError(data.error ?? "Không gửi được tin nhắn.");
+      setCommunitySending(false);
+      return;
+    }
+
     setCommunityInput("");
-    loadPosts();
+    await refreshCommunity();
+    setCommunitySending(false);
+  };
+
+  const sendCoinGift = async () => {
+    if (communitySending) return;
+    setCommunitySending(true);
+    setCommunityError("");
+
+    const res = await fetch("/api/posts", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({
+        giftCoin: { totalCoins: giftCoinAmount, maxReceivers: giftReceiverLimit },
+      }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setCommunityError(data.error ?? "Không gửi được lì xì coin.");
+      setCommunitySending(false);
+      return;
+    }
+    await loadMe();
+    await refreshCommunity();
+    setCommunitySending(false);
+  };
+
+  const claimCoinGift = async (postId: string) => {
+    const res = await fetch("/api/posts", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ claimGiftPostId: postId }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setCommunityError(data.error ?? "Không nhận được lì xì.");
+      return;
+    }
+    await loadMe();
+    await refreshCommunity();
   };
 
   const createAdmin = async () => {
@@ -454,6 +843,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           methodGuide: newLessonMethodGuide,
           practiceChallenge: newLessonPracticeChallenge,
           samplePrompt: newLessonSamplePrompt,
+          price: coursePriceDraft["new"] ?? 0,
         },
       }),
     });
@@ -498,24 +888,205 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     loadLeaderboard();
   };
 
+  const patchConfig = async (payload: Record<string, unknown>) => {
+    const res = await fetch("/api/config", {
+      method: "PATCH",
+      headers: authHeaders,
+      body: JSON.stringify(payload),
+    });
+    const data = (await res.json()) as { error?: string; message?: string };
+    if (!res.ok) throw new Error(data.error ?? "Không thực hiện được thao tác config.");
+    await loadConfig();
+    await loadMe();
+    return data;
+  };
+
+  const runGameAction = async (payload: Record<string, unknown>) => {
+    setGameActionLoading(true);
+    try {
+      const res = await fetch("/api/game", {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json()) as { error?: string; coinReward?: number };
+      if (!res.ok) throw new Error(data.error ?? "Không thực hiện được hành động.");
+      await loadMe();
+      await loadConfig();
+      return data;
+    } finally {
+      setGameActionLoading(false);
+    }
+  };
+
+  const buyLesson = async (lessonId: string) => {
+    try {
+      await runGameAction({ action: "buy_lesson", lessonId });
+      setShopMsg("Mua khóa học thành công. Đã mở khóa vĩnh viễn!");
+      playUiSound(780);
+    } catch (error) {
+      setShopMsg(error instanceof Error ? error.message : "Mua khóa thất bại.");
+    }
+  };
+
+  const buyItem = async (itemId: string) => {
+    try {
+      await runGameAction({ action: "buy_item", itemId });
+      setShopMsg("Mua vật phẩm thành công.");
+      playUiSound(740);
+    } catch (error) {
+      setShopMsg(error instanceof Error ? error.message : "Mua vật phẩm thất bại.");
+    }
+  };
+
+  const createCommunityCourse = async () => {
+    try {
+      const data = await patchConfig({
+        createCourseSubmission: {
+          title: courseCreateTitle,
+          topic: courseCreateTopic,
+          situation: courseCreateSituation,
+          overview: courseCreateOverview,
+          methodGuide: courseCreateMethod,
+          practiceChallenge: courseCreatePractice,
+          samplePrompt: courseCreateSample,
+        },
+      });
+      setShopMsg(data.message ?? "Đã gửi khóa học chờ duyệt.");
+      setCourseCreateTitle("");
+      setCourseCreateTopic("");
+      setCourseCreateSituation("");
+      setCourseCreateOverview("");
+      setCourseCreateMethod("");
+      setCourseCreatePractice("");
+      setCourseCreateSample("");
+      playUiSound(650);
+    } catch (error) {
+      setShopMsg(error instanceof Error ? error.message : "Không gửi được khóa học.");
+    }
+  };
+
+  const submitFeedback = async () => {
+    if (!feedbackInput.trim()) return;
+    setFeedbackSending(true);
+    setFeedbackMsg("");
+    const res = await fetch("/api/feedback", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ message: feedbackInput }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setFeedbackMsg(data.error ?? "Không gửi được feedback.");
+      setFeedbackSending(false);
+      return;
+    }
+    setFeedbackInput("");
+    setFeedbackMsg(text.feedbackSent);
+    setFeedbackSending(false);
+    setShowFeedbackModal(false);
+  };
+
+  const deleteFeedback = async (feedbackId: string) => {
+    const res = await fetch("/api/feedback", {
+      method: "DELETE",
+      headers: authHeaders,
+      body: JSON.stringify({ feedbackId }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setAdminMsg(data.error ?? "Không xóa được feedback.");
+      return;
+    }
+    setFeedbacks((prev) => prev.filter((item) => item.id !== feedbackId));
+  };
+
+  const deleteUser = async (userId: string) => {
+    const res = await fetch("/api/admin/users", {
+      method: "DELETE",
+      headers: authHeaders,
+      body: JSON.stringify({ userId }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setAdminMsg(data.error ?? "Không xóa được tài khoản.");
+      return;
+    }
+    setSelectedUser(null);
+    setAdminMsg("Đã xóa tài khoản người dùng.");
+    await loadUsers();
+  };
+
+  const unlockable = (lesson: PromptMasterLesson) => (lesson.price ?? 0) > 0 && !(me?.unlockedLessonIds ?? []).includes(lesson.id);
+
+  const openLessonEditor = (lesson: PromptMasterLesson) => {
+    setLessonMenuId(lesson.id);
+    setLessonEditDraft({ ...lesson });
+  };
+
+  const openLearningModal = (lessonId: string) => {
+    setSelectedLessonId(lessonId);
+    setLearningLessonId(lessonId);
+    setLessonStep(1);
+    setStep1Reflection("");
+    setStep2DraftPrompt("");
+    setMasterPrompt("");
+    setMasterResult("");
+    setShowLearningModal(true);
+  };
+
+  const saveLessonEditor = async () => {
+    if (!lessonEditDraft) return;
+    await patchConfig({
+      updateLesson: {
+        lessonId: lessonEditDraft.id,
+        title: lessonEditDraft.title,
+        topic: lessonEditDraft.topic,
+        situation: lessonEditDraft.situation,
+        overview: lessonEditDraft.overview,
+        methodGuide: lessonEditDraft.methodGuide,
+        practiceChallenge: lessonEditDraft.practiceChallenge,
+        samplePrompt: lessonEditDraft.samplePrompt,
+        price: lessonEditDraft.price ?? 0,
+      },
+    });
+    setShopMsg("Đã cập nhật bài học.");
+    setLessonMenuId("");
+    setLessonEditDraft(null);
+  };
+
+  useEffect(() => {
+    if (!config || !selectedLessonId) return;
+    const exists = config.promptMasterLessons.some((lesson) => lesson.id === selectedLessonId);
+    if (!exists) {
+      setSelectedLessonId(config.promptMasterLessons[0]?.id ?? "");
+      setLearningLessonId("");
+      setLessonStep(1);
+    }
+  }, [config, selectedLessonId]);
+
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 md:px-8 md:py-8">
+    <main className={`min-h-screen overflow-x-hidden bg-gradient-to-br px-3 py-4 text-slate-100 md:px-8 md:py-8 ${appThemeClass}`}>
       <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[260px_1fr]">
-        <aside className="rounded-2xl border border-white/10 bg-slate-900 p-4">
-          <h1 className="text-lg font-bold">{me?.name ?? "Loading..."}</h1>
+        <aside className={`rounded-2xl border p-4 ${themeClass}`}>
+          <h1 className={`text-lg font-bold ${nameStyleClass(me?.activeNameStyle)}`}>{me?.name ?? "Loading..."}</h1>
           <p className="text-sm text-slate-300">{me?.email}</p>
           <p className="mt-1 text-xs text-cyan-300">Chuỗi đăng nhập: {me?.loginStreak ?? 0} ngày</p>
+          <div className="mt-3 flex gap-2">
+            <button onClick={() => setLocale("vi")} className={`rounded-md border px-2 py-1 text-xs ${locale === "vi" ? "border-cyan-300 text-cyan-200" : "border-white/20 text-slate-300"}`}>VN</button>
+            <button onClick={() => setLocale("en")} className={`rounded-md border px-2 py-1 text-xs ${locale === "en" ? "border-cyan-300 text-cyan-200" : "border-white/20 text-slate-300"}`}>ENG</button>
+          </div>
 
-          <div className="mt-5 space-y-2">
-            {(["dashboard", "promptmaster", "arena", "auditor", "history", "community", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]).map((key) => (
+          <div className="mt-5 grid grid-cols-2 gap-2 md:block md:space-y-2">
+            {(["dashboard", "promptmaster", "arena", "auditor", "history", "community", "garden", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]).map((key) => (
               <button
                 key={key}
-                onClick={() => setActiveTab(key)}
-                className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-all duration-300 ${
-                  activeTab === key ? "bg-cyan-400 text-slate-950" : "bg-white/5"
+                onClick={() => { playUiSound(480); setActiveTab(key); }}
+                className={`w-full rounded-lg px-3 py-2 text-center text-sm transition-all duration-300 md:text-left ${
+                  activeTab === key ? (activeTheme === "pink" ? "bg-pink-300 text-slate-950" : activeTheme === "ocean" ? "bg-cyan-300 text-slate-950" : activeTheme === "violet" ? "bg-violet-300 text-slate-950" : "bg-cyan-400 text-slate-950") : hasNeonFrame ? "bg-white/5 neon-chip" : "bg-white/5"
                 }`}
               >
-                {key}
+                {TAB_LABELS[locale][key]}
               </button>
             ))}
           </div>
@@ -527,24 +1098,37 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
             }}
             className="mt-6 w-full rounded-lg border border-white/20 px-3 py-2"
           >
-            Đăng xuất
+            {text.logout}
+          </button>
+          <button
+            onClick={() => setShowFeedbackModal(true)}
+            className="mt-2 w-full rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200"
+          >
+            {text.feedback}
           </button>
         </aside>
 
-        <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-900/50 p-4 scrollbar-pro max-h-[84vh] overflow-y-auto">
+        <section className={`space-y-4 break-words rounded-2xl border p-4 md:max-h-[84vh] md:overflow-y-auto scrollbar-pro ${themeClass}`}>
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Điểm trung bình</p><p className="text-2xl font-bold">{avgScore}%</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Số ngày đăng nhập</p><p className="text-2xl font-bold">{me?.totalLoginDays ?? 0}</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Chuỗi hiện tại</p><p className="text-2xl font-bold text-emerald-300">{me?.loginStreak ?? 0} ngày</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Khoá PromptMaster đã xong</p><p className="text-2xl font-bold text-cyan-300">{completedCourses}</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Lượt Arena / Auditor</p><p className="text-xl font-bold text-violet-300">{arenaAttempts} / {auditorAttempts}</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs">Bài cộng đồng</p><p className="text-2xl font-bold text-amber-300">{communityPosts}</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Điểm trung bình</p><p className="text-2xl font-bold">{avgScore}%</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Số ngày đăng nhập</p><p className="text-2xl font-bold">{me?.totalLoginDays ?? 0}</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Chuỗi hiện tại</p><p className="text-2xl font-bold text-emerald-300">{me?.loginStreak ?? 0} ngày</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Khoá PromptMaster đã xong</p><p className="text-2xl font-bold text-cyan-300">{completedCourses}</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Lượt Arena / Auditor</p><p className="text-xl font-bold text-violet-300">{arenaAttempts} / {auditorAttempts}</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Bài cộng đồng</p><p className="text-2xl font-bold text-amber-300">{communityPosts}</p></div>
+            <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Endless Coin</p><p className="text-2xl font-bold text-yellow-300">{me?.coins ?? 0}</p></div>
           </div>
 
           {activeTab === "dashboard" && (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
+              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
               <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
+              <div className="mt-3 rounded-lg border border-cyan-300/20 bg-slate-900/60 p-3 text-xs text-cyan-100">
+                <p className="font-semibold">{text.contactTitle}</p>
+                <p className="mt-1">{text.contactPhone}</p>
+                <p>{text.contactEmail}</p>
+              </div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
                   <p className="font-semibold text-cyan-200">Hiệu suất Arena</p>
@@ -557,49 +1141,251 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <p className="mt-1">Bài mới nhất: {histories[0] ? `${histories[0].title} (${histories[0].score}%)` : "Chưa có"}</p>
                 </div>
               </div>
+
+              <div className="mt-4 rounded-xl border border-emerald-300/20 bg-emerald-500/10 p-4">
+                <h3 className="text-lg font-semibold text-emerald-200">{text.shopTitle}</h3>
+                <p className="mt-1 text-xs text-slate-300">{text.shopDesc}</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {config?.shopItems.map((item) => (
+                    <div key={item.id} className="rounded-lg border border-white/10 bg-slate-900/70 p-3 text-sm">
+                      <p className="text-xl">{item.image}</p>
+                      <p className="font-semibold">{item.name}</p>
+                      <p className="text-xs text-slate-300">{item.effect}</p>
+                      <p className="mt-1 text-xs text-amber-300">{item.price} Coin</p>
+                      <button onClick={() => void buyItem(item.id)} disabled={gameActionLoading} className="mt-2 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-200 disabled:opacity-50">{text.buy}</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-500/10 p-4">
+                <h3 className="text-lg font-semibold text-cyan-200">{text.ownedTitle}</h3>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {ownedDecorations.length ? ownedDecorations.map((item) => (
+                    <span key={item.id} className="inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-slate-900/70 px-3 py-1 text-xs">
+                      <span>{item.image} {item.name}</span>
+                      <button
+                        onClick={async () => {
+                          const data = await runGameAction({ action: "sell_item", itemId: item.id });
+                          const refund = (data as { refund?: number }).refund ?? 0;
+                          setShopMsg(`Đã bán ${item.name} và nhận lại ${refund} coin.`);
+                        }}
+                        className="rounded border border-rose-300/40 px-1 text-rose-300"
+                        title={text.sell}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  )) : <p className="text-xs text-slate-300">{text.noItems}</p>}
+                </div>
+                {ownedDashboardDecorations.length ? (
+                  <p className="mt-3 text-xs text-cyan-200">Dashboard decor: {ownedDashboardDecorations.map((item)=>`${item.image} ${item.name}`).join(" • ")}</p>
+                ) : null}
+                {ownedGardenDecorations.length ? (
+                  <p className="mt-3 text-xs text-emerald-200">{text.gardenOwned}: {ownedGardenDecorations.map((item)=>`${item.image} ${item.name}`).join(" • ")}</p>
+                ) : null}
+                {ownedThemes.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {ownedThemes.map((theme) => (
+                      <button
+                        key={theme.id}
+                        onClick={async () => {
+                          const nextTheme = theme.themeKey ?? null;
+                          setMe((prev) => (prev ? { ...prev, activeDashboardTheme: nextTheme } : prev));
+                          try {
+                            await runGameAction({ action: "set_dashboard_theme", themeKey: theme.themeKey });
+                            setShopMsg(`Đã áp dụng chủ đề ${theme.name}.`);
+                          } catch (error) {
+                            await loadMe();
+                            setShopMsg(error instanceof Error ? error.message : "Không áp dụng được chủ đề.");
+                          }
+                        }}
+                        className={`rounded-lg border px-3 py-1 text-xs ${activeTheme === theme.themeKey ? "border-pink-300/70 bg-pink-500/20 text-pink-100" : "border-white/20 text-slate-200"}`}
+                      >
+                        {activeTheme === theme.themeKey ? `✅ Đang dùng ${theme.name}` : `${text.useTheme} ${theme.name}`}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
           )}
 
           {activeTab === "promptmaster" && config && (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Prompt Master - Nhiều khóa học</h2>
+              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {config.promptMasterLessons.map((lesson) => (
-                  <button key={lesson.id} onClick={() => setSelectedLessonId(lesson.id)} className={`rounded-lg border p-3 text-left ${selectedLesson?.id===lesson.id?'border-cyan-300 bg-cyan-500/10':'border-white/10 bg-slate-800/70'}`}>
-                    <p className="font-semibold">{lesson.title}</p>
-                    <p className="text-xs text-slate-300">{lesson.topic}</p>
-                  </button>
+                  <div key={lesson.id} className={`relative rounded-lg border p-3 ${selectedLesson?.id===lesson.id?'border-cyan-300 bg-cyan-500/10':'border-white/10 bg-slate-800/70'}`}>
+                    {me?.isAdmin ? (
+                      <button
+                        onClick={() => openLessonEditor(lesson)}
+                        className="absolute right-2 top-2 rounded-full border border-white/30 px-2 text-xs text-slate-200"
+                        title="Tùy chọn"
+                      >
+                        ...
+                      </button>
+                    ) : null}
+                    <button onClick={() => setSelectedLessonId(lesson.id)} className="w-full text-left">
+                      <p className="font-semibold">{lesson.title}</p>
+                      <p className="text-xs text-slate-300">{lesson.topic}</p>
+                      {(lesson.price ?? 0) > 0 ? <p className="mt-1 text-xs text-amber-300">Giá: {lesson.price} Endless Coin</p> : null}
+                    </button>
+                    {unlockable(lesson) ? (
+                      <button onClick={() => void buyLesson(lesson.id)} disabled={gameActionLoading} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-2 text-xs text-amber-200 disabled:opacity-50">
+                        {(lesson.price ?? 0)} Coin
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          playUiSound(620);
+                          openLearningModal(lesson.id);
+                        }}
+                        className="mt-3 rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200"
+                      >
+                        {text.learn}
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
-
-              {selectedLesson && (
-                <div className="mt-4 rounded-lg border border-white/10 bg-slate-800/70 p-4">
-                  <p className="text-sm font-semibold text-cyan-200">Bước 1 - Thực trạng</p>
-                  <p className="text-sm text-slate-200">{selectedLesson.situation}</p>
-                  <p className="mt-3 text-sm font-semibold text-cyan-200">Bước 2 - Thông tin sơ qua</p>
-                  <p className="text-sm text-slate-300">{selectedLesson.overview}</p>
-                  <p className="mt-3 text-sm font-semibold text-cyan-200">Bước 3 - Phương pháp và cách dạy</p>
-                  <p className="text-sm text-slate-300">{selectedLesson.methodGuide}</p>
-                  <p className="mt-1 text-xs text-slate-400">(Mục này tập trung cách viết prompt AI để tạo prompt chất lượng)</p>
-                  <p className="mt-3 text-sm font-semibold text-cyan-200">Bước 4 - Thực hành</p>
-                  <p className="text-sm text-slate-200">Đề bài: {selectedLesson.practiceChallenge}</p>
-                  <p className="mt-2 text-xs text-slate-300">Prompt tham khảo: {selectedLesson.samplePrompt}</p>
-                  <textarea value={masterPrompt} onChange={(e)=>setMasterPrompt(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Viết prompt của bạn..."/>
-                                    <button onClick={submitPromptMaster} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">{loading?"AI đang chấm...":"Chấm Prompt Master"}</button>
-                  {masterResult ? <p className="mt-2 whitespace-pre-line text-sm text-slate-200">{masterResult}</p> : null}
+              {shopMsg ? <p className="mt-2 text-xs text-amber-200">{shopMsg}</p> : null}
+              {lessonMenuId && lessonEditDraft ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+                  <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-white/15 bg-slate-950/95 p-3 text-xs">
+                  <p className="font-semibold text-cyan-200">Chỉnh sửa khóa học (admin)</p>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    <input value={lessonEditDraft.title} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, title: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên khóa"/>
+                    <input value={lessonEditDraft.topic} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, topic: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Chủ đề"/>
+                    <input value={lessonEditDraft.situation} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, situation: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Thực trạng"/>
+                    <input value={lessonEditDraft.overview} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, overview: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Tóm tắt"/>
+                    <input value={lessonEditDraft.methodGuide} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, methodGuide: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Phương pháp"/>
+                    <input value={lessonEditDraft.practiceChallenge} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, practiceChallenge: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Bài thực hành"/>
+                    <input value={lessonEditDraft.samplePrompt} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, samplePrompt: e.target.value })} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Prompt mẫu"/>
+                    <input type="number" value={lessonEditDraft.price ?? 0} onChange={(e)=>setLessonEditDraft({ ...lessonEditDraft, price: Number(e.target.value) })} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Giá coin"/>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button onClick={saveLessonEditor} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-cyan-200">Lưu</button>
+                    <button onClick={async ()=>{ if (!window.confirm("Bạn chắc chưa? Xóa bài học này sẽ không thể hoàn tác.")) return; await patchConfig({ deleteLessonId: lessonMenuId }); setLessonMenuId(""); setLessonEditDraft(null); setShopMsg("Đã xóa bài học."); }} className="rounded-lg border border-rose-300/40 px-3 py-2 text-rose-300">Xóa</button>
+                    <button onClick={()=>{ setLessonMenuId(""); setLessonEditDraft(null); }} className="rounded-lg border border-white/20 px-3 py-2">Đóng</button>
+                  </div>
+                  </div>
                 </div>
-              )}
+              ) : null}
+              <div className="mt-4 rounded-lg border border-white/10 bg-slate-900/60 p-3">
+                <p className="text-sm font-semibold text-cyan-200">Tạo khoá học cộng đồng (phí {config.createCourseFee} coin)</p>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  <input value={courseCreateTitle} onChange={(e)=>setCourseCreateTitle(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên khóa"/>
+                  <input value={courseCreateTopic} onChange={(e)=>setCourseCreateTopic(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Chủ đề"/>
+                  <input value={courseCreateSituation} onChange={(e)=>setCourseCreateSituation(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Thực trạng"/>
+                  <input value={courseCreateOverview} onChange={(e)=>setCourseCreateOverview(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Tóm tắt"/>
+                  <input value={courseCreateMethod} onChange={(e)=>setCourseCreateMethod(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Phương pháp"/>
+                  <input value={courseCreatePractice} onChange={(e)=>setCourseCreatePractice(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Bài thực hành"/>
+                  <input value={courseCreateSample} onChange={(e)=>setCourseCreateSample(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Prompt mẫu"/>
+                </div>
+                <button onClick={createCommunityCourse} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Gửi admin duyệt</button>
+              </div>
+
+              {showLearningModal && selectedLesson && isLearningSelectedLesson ? (
+                <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4">
+                  <div className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-cyan-300/30 bg-slate-900 p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-cyan-200">Học: {selectedLesson.title}</p>
+                      <button onClick={() => setShowLearningModal(false)} className="rounded-lg border border-white/20 px-2 py-1 text-xs">{text.close}</button>
+                    </div>
+                    <>
+                      <p className="text-xs text-slate-400">{text.progress}: {text.step} {lessonStep}/3</p>
+
+                      {lessonStep === 1 && (
+                        <div className="mt-2">
+                          <p className="text-sm font-semibold text-cyan-200">{text.step1Title}</p>
+                          <p className="mt-1 text-sm text-slate-200">{selectedLesson.situation}</p>
+                          <p className="mt-2 text-sm text-slate-300">{selectedLesson.overview}</p>
+                          <textarea
+                            value={step1Reflection}
+                            onChange={(e)=>setStep1Reflection(e.target.value)}
+                            className="mt-3 h-20 w-full rounded-lg border border-white/15 bg-slate-900 p-2"
+                            placeholder="Viết tóm tắt điều bạn hiểu từ bối cảnh (>= 20 ký tự)..."
+                          />
+                          <button
+                            onClick={() => {
+                              playUiSound(670);
+                              setLessonStep(2);
+                            }}
+                            disabled={step1Reflection.trim().length < 20}
+                            className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50"
+                          >
+                            {text.continueStep2}
+                          </button>
+                        </div>
+                      )}
+
+                      {lessonStep === 2 && (
+                        <div className="mt-2">
+                          <p className="text-sm font-semibold text-cyan-200">{text.step2Title}</p>
+                          <p className="mt-1 text-sm text-slate-300">{selectedLesson.methodGuide}</p>
+                          <p className="mt-1 text-xs text-slate-400">(Mục này tập trung cách viết prompt AI để tạo prompt chất lượng)</p>
+                          <textarea
+                            value={step2DraftPrompt}
+                            onChange={(e)=>setStep2DraftPrompt(e.target.value)}
+                            className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2"
+                            placeholder="Viết prompt nháp dựa trên phương pháp (>= 30 ký tự)..."
+                          />
+                          <button
+                            onClick={() => {
+                              playUiSound(700);
+                              if (!masterPrompt.trim()) setMasterPrompt(step2DraftPrompt);
+                              setLessonStep(3);
+                            }}
+                            disabled={step2DraftPrompt.trim().length < 30}
+                            className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50"
+                          >
+                            {text.continueStep3}
+                          </button>
+                        </div>
+                      )}
+
+                      {lessonStep === 3 && (
+                        <div className="mt-2">
+                          <p className="text-sm font-semibold text-cyan-200">{text.step3Title}</p>
+                          <p className="text-sm text-slate-200">Đề bài: {selectedLesson.practiceChallenge}</p>
+                          <p className="mt-2 text-xs text-slate-300">Prompt tham khảo: {selectedLesson.samplePrompt}</p>
+                          <textarea value={masterPrompt} onChange={(e)=>setMasterPrompt(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Viết prompt của bạn..."/>
+                          <button onClick={() => { playUiSound(760); void submitPromptMaster(); }} disabled={masterLoading || !masterPrompt.trim()} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">{masterLoading ? text.evaluating : text.gradePromptMaster}</button>
+                          {masterResult ? <p className="mt-2 whitespace-pre-line text-sm text-slate-200">{masterResult}</p> : null}
+                        </div>
+                      )}
+                    </>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
 
           {activeTab === "arena" && config && (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Clean Prompt Arena - Chủ đề tuần</h2>
+              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
               <p className="mt-2 text-sm text-slate-300">{config.arenaWeekly.weekLabel}: {config.arenaWeekly.title}</p>
               <p className="mt-2 rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">Input: {config.arenaWeekly.inputText}</p>
               <textarea value={arenaPrompt} onChange={(e)=>setArenaPrompt(e.target.value)} className="mt-3 h-20 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Prompt của bạn"/>
-                            <button onClick={submitArena} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">Nộp Arena</button>
+              {alreadySubmittedArena ? <p className="mt-2 text-xs text-amber-300">Bạn đã nộp đề tuần này, mỗi người chỉ được trả lời 1 lần.</p> : null}
+              <button onClick={() => { playUiSound(740); void submitArena(); }} disabled={arenaLoading || alreadySubmittedArena || !arenaPrompt.trim()} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">{arenaLoading ? "AI đang chấm..." : "Nộp Arena"}</button>
               {arenaResult ? <p className="mt-2 whitespace-pre-line text-sm">{arenaResult}</p> : null}
+
+              <div className="mt-4 rounded-xl border border-amber-300/25 bg-amber-500/10 p-3">
+                <p className="text-sm font-semibold text-amber-200">Thưởng Arena theo tuần ({config.arenaWeekly.weekLabel})</p>
+                <p className="mt-1 text-xs text-slate-300">Top 1-5 sẽ nhận thưởng Endless Coin khi admin chốt bảng xếp hạng tuần.</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {(config.arenaWeeklyRewards ?? []).map((reward) => (
+                    <div key={reward.rank} className="rounded-lg border border-amber-300/30 bg-slate-900/70 p-2 text-center text-xs">
+                      <p className="font-semibold text-amber-200">Top {reward.rank}</p>
+                      <p className="text-yellow-300">+{reward.coins} coin</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               <h3 className="mt-5 text-lg font-semibold text-cyan-200">Leaderboard Accuracy / Tokens</h3>
               <div className="mt-2 space-y-2">
@@ -613,24 +1399,68 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "auditor" && config && (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className={panelClass}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold text-cyan-200">AI Auditor</h2>
-                <button onClick={randomizeAuditorScenario} className="rounded-lg border border-cyan-300/50 px-3 py-2 text-sm text-cyan-200">Làm mới đề ngẫu nhiên</button>
+                {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
+                <button onClick={randomizeAuditorScenario} disabled={auditorLoading} className="rounded-lg border border-cyan-300/50 px-3 py-2 text-sm text-cyan-200 disabled:opacity-50">{text.refreshAuditor}</button>
               </div>
               <p className="mt-2 text-sm text-cyan-100">Đề hiện tại: {(activeAuditorScenario ?? config.auditorScenario).title}</p>
               <p className="mt-2 text-sm text-slate-300">Câu trả lời AI sai: {(activeAuditorScenario ?? config.auditorScenario).wrongAnswer}</p>
               <p className="mt-1 text-xs text-slate-400">Nhiệm vụ: nêu lỗi và viết prompt sửa để AI ra đúng.</p>
               <textarea value={auditorIssues} onChange={(e)=>setAuditorIssues(e.target.value)} className="mt-3 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Nêu các lỗi bạn phát hiện..."/>
               <textarea value={auditorRePrompt} onChange={(e)=>setAuditorRePrompt(e.target.value)} className="mt-2 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Prompt sửa lại để AI trả lời đúng..."/>
-              <button onClick={submitAuditor} disabled={loading} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950">Chấm điểm Auditor</button>
+              <button onClick={() => { playUiSound(760); void submitAuditor(); }} disabled={auditorLoading || !auditorRePrompt.trim()} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">{auditorLoading ? "AI đang chấm..." : "Chấm điểm Auditor"}</button>
               {auditorResult ? <p className="mt-2 whitespace-pre-line text-sm">{auditorResult}</p> : null}
             </div>
           )}
 
+
+          {activeTab === "garden" && (
+            <div className={panelClass}>
+              <h2 className="text-xl font-semibold text-emerald-200">Trồng cây</h2>
+              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
+              <p className="mt-1 text-sm text-slate-300">Mảnh đất của bạn dùng Endless Coin để mua hạt giống, gieo, tưới và thu hoạch.</p>
+
+              <div className="mt-3 rounded-xl border border-white/10 bg-slate-900/70 p-4">
+                <p className="text-sm">🌾 Mảnh đất: {me?.farmPlot?.seedType ? `Đang trồng (${me.farmPlot.seedType})` : "Trống"}</p>
+                <p className="text-xs text-slate-400">Sẵn sàng thu hoạch: {me?.farmPlot?.readyAt ? (remainSec <= 0 ? "Đã sẵn sàng thu hoạch" : `${new Date(me.farmPlot.readyAt).toLocaleTimeString("vi-VN")} (${remainSec}s)`) : "-"}</p>
+                <div className="mt-2">
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-700">
+                    <div className="h-full bg-emerald-400 transition-all" style={{ width: `${me?.farmPlot?.seedType ? Math.min(100, Math.max(0, 100 - Math.floor((remainSec / ((SEED_OPTIONS.find((seed) => seed.id === me?.farmPlot?.seedType)?.growHours ?? 1) * 3600)) * 100))) : 0}%` }} />
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-300">Tiến trình: {me?.farmPlot?.seedType ? `${Math.min(100, Math.max(0, 100 - Math.floor((remainSec / ((SEED_OPTIONS.find((seed) => seed.id === me?.farmPlot?.seedType)?.growHours ?? 1) * 3600)) * 100)))}%` : "0%"}</p>
+                </div>
+                <div className="mt-2 text-4xl">{remainSec <= 0 && me?.farmPlot?.seedType ? "🌸" : me?.farmPlot?.seedType ? "🌱" : "🪴"}</div>
+                <div className="mt-2 rounded-lg border border-emerald-300/20 bg-emerald-900/20 p-2 text-xs text-emerald-200">
+                  <div className="flex flex-wrap gap-2">
+                    {ownedGardenDecorations.length ? ownedGardenDecorations.map((item) => <span key={item.id} className="rounded-full border border-emerald-300/40 bg-slate-900/60 px-2 py-1">📍 Đặt {item.image} {item.name}</span>) : <span>(chưa có)</span>}
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  {SEED_OPTIONS.map((seed) => (
+                    <button key={seed.id} onClick={() => setSelectedSeed(seed.id)} className={`rounded-lg border px-3 py-2 text-left text-xs ${selectedSeed === seed.id ? "border-emerald-300/60 bg-emerald-500/20" : "border-white/15 bg-slate-800"}`}>
+                      <p className="font-semibold">{seed.name}</p>
+                      <p className="text-slate-300">Giá {seed.price} → {seed.reward} coin / {seed.growHours}h</p>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button onClick={async ()=>{ try { const picked = SEED_OPTIONS.find((seed)=>seed.id===selectedSeed); await runGameAction({ action: "plant_seed", seedType: selectedSeed }); setGardenMsg(`Đã gieo ${picked?.name ?? "hạt giống"}.`); playUiSound(620);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi gieo hạt.");}}} disabled={gameActionLoading} className="rounded-lg border border-emerald-300/40 px-3 py-2 text-xs text-emerald-200 disabled:opacity-50">Gieo hạt đã chọn</button>
+                  <button onClick={async ()=>{ try { await runGameAction({ action: "water_plot" }); setGardenMsg("Đã tưới cây, giảm 1 giờ trưởng thành."); playUiSound(650);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi tưới cây.");}}} disabled={gameActionLoading} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200 disabled:opacity-50">Tưới cây</button>
+                  <button onClick={async ()=>{ try { const data = await runGameAction({ action: "harvest_plot" }); setGardenMsg(`Thu hoạch thành công +${(data as { coinReward?: number }).coinReward ?? 0} coin`); setHarvestFxActive(true); setTimeout(()=>setHarvestFxActive(false), 1400); playUiSound(780);} catch(e){ setGardenMsg(e instanceof Error ? e.message : "Lỗi thu hoạch.");}}} disabled={gameActionLoading} className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs text-amber-200 disabled:opacity-50">Thu hoạch</button>
+                  <button onClick={async ()=>{ try { await runGameAction({ action: "abandon_plot" }); setGardenMsg("Đã bỏ cây đang trồng."); } catch(e){ setGardenMsg(e instanceof Error ? e.message : "Không bỏ cây được."); }} } disabled={gameActionLoading} className="rounded-lg border border-rose-300/40 px-3 py-2 text-xs text-rose-200 disabled:opacity-50">Bỏ cây</button>
+                </div>
+              </div>
+              {gardenMsg ? <p className="mt-2 text-xs text-emerald-200">{gardenMsg}</p> : null}
+              {harvestFxActive ? <div className="pointer-events-none mt-2 animate-pulse text-center text-2xl">🎉 ✨ 🎆 ✨ 🎉</div> : null}
+            </div>
+          )}
+
           {activeTab === "history" && (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
+            <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Lịch sử cá nhân</h2>
+              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
               <div className="mt-3 space-y-2">
                 {histories.map((item) => (
                   <div key={item.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
@@ -643,26 +1473,95 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "community" && (
-            <div className="rounded-2xl border border-white/10 bg-slate-900 p-5">
-              <h2 className="text-xl font-semibold text-cyan-200">Cộng đồng</h2>
+            <div className={panelClass}>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-xl font-semibold text-cyan-200">Chat cộng đồng</h2>
+                {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
+                <button
+                  onClick={refreshCommunity}
+                  className="rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200"
+                >
+                  Làm mới ngay
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">Hiển thị tin nhắn cộng đồng theo danh sách hiện tại. Bấm &quot;Làm mới ngay&quot; để cập nhật.</p>
+              <div className="mt-3 grid gap-2 rounded-xl border border-amber-300/20 bg-amber-500/10 p-3 md:grid-cols-3">
+                <input type="number" min={1} value={giftCoinAmount} onChange={(e)=>setGiftCoinAmount(Number(e.target.value))} className="rounded-lg border border-white/15 bg-slate-800 p-2 text-sm" placeholder="Tổng coin gửi"/>
+                <input type="number" min={1} value={giftReceiverLimit} onChange={(e)=>setGiftReceiverLimit(Number(e.target.value))} className="rounded-lg border border-white/15 bg-slate-800 p-2 text-sm" placeholder="Số người nhận"/>
+                <button onClick={sendCoinGift} disabled={communitySending} className="rounded-lg border border-amber-300/50 px-3 py-2 text-xs text-amber-200 disabled:opacity-50">Gửi lì xì coin</button>
+              </div>
+
+              <div
+                ref={chatContainerRef}
+                className="mt-3 max-h-[42vh] space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/70 p-3"
+              >
+                {posts
+                  .slice()
+                  .reverse()
+                  .map((post) => {
+                    const mine = post.userName === me?.name;
+                    return (
+                      <div key={post.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
+                            mine
+                              ? "bg-cyan-500/20 text-cyan-100"
+                              : "border border-white/10 bg-slate-800 text-slate-100"
+                          }`}
+                        >
+                          <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                            <span className={mine ? "text-cyan-200" : "text-slate-300"}><span className={nameStyleClass(post.activeNameStyle)}>{post.userName}</span> <span className="text-[10px] uppercase text-cyan-300/80">({post.userRole ?? "member"})</span></span>
+                            <span className="text-slate-400">{formatChatTime(post.createdAt)}</span>
+                          </div>
+                          <p className="whitespace-pre-wrap break-words">{post.content}</p>
+                          {post.type === "coin-gift" && post.gift ? (
+                            <div className="mt-2 rounded-lg border border-amber-300/30 bg-amber-500/10 p-2 text-xs">
+                              <p>Đã nhận: {post.gift.claimedUserIds.length}/{post.gift.maxReceivers} người</p>
+                              <button
+                                onClick={() => void claimCoinGift(post.id)}
+                                disabled={(post.gift.claimedUserIds ?? []).includes(me?.id ?? "") || post.gift.claimedUserIds.length >= post.gift.maxReceivers}
+                                className="mt-1 rounded border border-amber-300/40 px-2 py-1 text-amber-200 disabled:opacity-50"
+                              >
+                                {(post.gift.claimedUserIds ?? []).includes(me?.id ?? "") ? "Đã nhận" : "Nhận coin"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                {!posts.length ? <p className="text-center text-xs text-slate-400">Chưa có tin nhắn nào.</p> : null}
+              </div>
+
               <div className="mt-3 flex gap-2">
-                <input value={communityInput} onChange={(e)=>setCommunityInput(e.target.value)} className="flex-1 rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Chia sẻ prompt hay..."/>
-                <button onClick={postCommunity} className="rounded-lg bg-cyan-400 px-3 py-2 font-semibold text-slate-950">Đăng</button>
+                <textarea
+                  value={communityInput}
+                  onChange={(e) => setCommunityInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void postCommunity();
+                    }
+                  }}
+                  className="h-20 flex-1 rounded-lg border border-white/15 bg-slate-800 p-2"
+                  placeholder="Nhập tin nhắn cho cộng đồng... (Enter để gửi, Shift+Enter xuống dòng)"
+                />
+                <button
+                  onClick={postCommunity}
+                  disabled={communitySending}
+                  className="rounded-lg bg-cyan-400 px-3 py-2 font-semibold text-slate-950 disabled:opacity-60"
+                >
+                  {communitySending ? "Đang gửi..." : "Gửi"}
+                </button>
               </div>
-              <div className="mt-3 space-y-2">
-                {posts.map((post) => (
-                  <div key={post.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3">
-                    <p className="text-sm font-semibold text-cyan-200">{post.userName}</p>
-                    <p className="text-sm">{post.content}</p>
-                  </div>
-                ))}
-              </div>
+              {communityError ? <p className="mt-2 text-xs text-rose-300">{communityError}</p> : null}
             </div>
           )}
 
           {activeTab === "admin" && me?.isAdmin && (
-            <div className="rounded-2xl border border-amber-300/20 bg-amber-400/10 p-5">
+            <div className={panelClass}>
               <h2 className="text-xl font-semibold text-amber-200">Admin Control</h2>
+              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
 
               <div className="mt-3 grid gap-2 md:grid-cols-3">
                 <input value={adminName} onChange={(e)=>setAdminName(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên admin"/>
@@ -681,7 +1580,69 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 <input value={newLessonPracticeChallenge} onChange={(e)=>setNewLessonPracticeChallenge(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Đề bài thực hành"/>
                 <input value={newLessonSamplePrompt} onChange={(e)=>setNewLessonSamplePrompt(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Prompt mẫu"/>
               </div>
-              <button onClick={addPromptLesson} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm khóa Prompt Master</button>
+              <div className="mt-2 flex items-center gap-2">
+                <input type="number" value={coursePriceDraft["new"] ?? 0} onChange={(e)=>setCoursePriceDraft((prev)=>({ ...prev, new: Number(e.target.value) }))} className="w-40 rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Giá coin"/>
+                <button onClick={addPromptLesson} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm khóa Prompt Master</button>
+              </div>
+
+              <h3 className="mt-4 font-semibold text-amber-200">Duyệt khóa học người dùng gửi</h3>
+              <div className="mt-2 space-y-2">
+                {(config?.courseSubmissions ?? []).map((sub) => (
+                  <div key={sub.id} className="rounded-lg border border-white/10 bg-slate-900/60 p-3 text-xs">
+                    <p className="font-semibold">{sub.title} - {sub.topic}</p>
+                    <p className="text-slate-300">Tác giả: {sub.creatorName}</p>
+                    <div className="mt-2 flex gap-2">
+                      <button onClick={async ()=>{ await patchConfig({ approveSubmissionId: sub.id }); setAdminMsg("Đã duyệt khóa học."); }} className="rounded-md border border-emerald-300/40 px-2 py-1 text-emerald-200">Duyệt</button>
+                      <button onClick={async ()=>{ await patchConfig({ rejectSubmissionId: sub.id }); setAdminMsg("Đã từ chối và xóa đề xuất."); }} className="rounded-md border border-rose-300/40 px-2 py-1 text-rose-200">Từ chối</button>
+                    </div>
+                  </div>
+                ))}
+                {!(config?.courseSubmissions?.length) ? <p className="text-xs text-slate-400">Không có khóa học chờ duyệt.</p> : null}
+              </div>
+
+              <h3 className="mt-4 font-semibold text-amber-200">Shop - thêm vật phẩm bán</h3>
+              <p className="mt-1 text-xs text-slate-300">Phần công dụng chọn từ danh sách có sẵn.</p>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <input value={shopItemName} onChange={(e)=>setShopItemName(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên vật phẩm"/>
+                <input value={shopItemImage} onChange={(e)=>setShopItemImage(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Emoji/URL hình"/>
+                <input type="number" value={shopItemPrice} onChange={(e)=>setShopItemPrice(Number(e.target.value))} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Giá"/>
+                <select value={shopItemEffect} onChange={(e)=>setShopItemEffect(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2">
+                  <option>Trang trí dashboard</option>
+                  <option>Trang trí khu vườn</option>
+                  <option>Đổi dashboard sang chủ đề hồng</option>
+                  <option>Đổi dashboard sang chủ đề đại dương</option>
+                </select>
+                <select value={shopItemCategory} onChange={(e)=>setShopItemCategory(e.target.value as "dashboard-theme" | "dashboard-decoration" | "garden-decoration")} className="rounded-lg border border-white/15 bg-slate-800 p-2">
+                  <option value="dashboard-decoration">Dashboard decoration</option>
+                  <option value="garden-decoration">Garden decoration</option>
+                  <option value="dashboard-theme">Dashboard theme</option>
+                </select>
+                {shopItemCategory === "dashboard-theme" ? (
+                  <select value={shopItemThemeKey} onChange={(e)=>setShopItemThemeKey(e.target.value as "pink" | "ocean" | "violet" | "none")} className="rounded-lg border border-white/15 bg-slate-800 p-2">
+                    <option value="pink">pink</option>
+                    <option value="ocean">ocean</option>
+                    <option value="violet">violet</option>
+                  </select>
+                ) : <div />}
+              </div>
+              <button onClick={async ()=>{ await patchConfig({ addShopItem: { name: shopItemName, image: shopItemImage, price: shopItemPrice, effect: shopItemEffect, category: shopItemCategory, themeKey: shopItemCategory === "dashboard-theme" ? shopItemThemeKey : null } }); setAdminMsg("Đã thêm vật phẩm shop."); setShopItemName(""); setShopItemImage("🌱"); setShopItemPrice(80); setShopItemEffect("Trang trí dashboard"); setShopItemCategory("dashboard-decoration"); setShopItemThemeKey("none"); }} className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm vật phẩm shop</button>
+              <div className="mt-2 space-y-2">
+                {(config?.shopItems ?? []).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-900/60 p-2 text-xs">
+                    <p>{item.image} {item.name} - {item.price} coin</p>
+                    <button
+                      onClick={async () => { await patchConfig({ deleteShopItemId: item.id }); setAdminMsg("Đã xóa vật phẩm shop."); }}
+                      className="rounded border border-rose-300/40 px-2 py-1 text-rose-300"
+                    >
+                      {text.adminDeleteItem}
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button onClick={async ()=>{ await patchConfig({ grantCoins: { amount: 1000 } }); setAdminMsg("Đã cộng +1000 coin."); }} className="rounded-lg bg-amber-300 px-3 py-2 text-sm font-semibold text-slate-950">+1000 coin</button>
+              </div>
 
               <h3 className="mt-4 font-semibold text-amber-200">Thay đổi đề bài Arena tuần</h3>
               <div className="mt-2 grid gap-2 md:grid-cols-2">
@@ -699,28 +1660,69 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <div key={user.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
                     <div className="flex items-center justify-between gap-3">
                       <p>{user.name} - {user.email} ({user.role})</p>
-                      <button onClick={()=>setSelectedUser(user)} className="rounded-md border border-cyan-300/40 px-2 py-1 text-xs text-cyan-200">Xem chi tiết</button>
+                      <button onClick={()=>setSelectedUser(user)} className="rounded-md border border-cyan-300/40 px-2 py-1 text-xs text-cyan-200">{text.viewDetail}</button>
                     </div>
                   </div>
                 ))}
               </div>
 
+              <h3 className="mt-4 font-semibold text-amber-200">{text.feedbackListTitle}</h3>
+              <div className="mt-2 space-y-2">
+                {feedbacks.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-white/10 bg-slate-900/60 p-3 text-xs">
+                    <p className="font-semibold text-cyan-100">{item.userName}</p>
+                    <p className="mt-1 whitespace-pre-line text-slate-200">{item.message}</p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <p className="text-slate-400">{new Date(item.createdAt).toLocaleString(locale === "en" ? "en-US" : "vi-VN")}</p>
+                      <button onClick={() => { void deleteFeedback(item.id); }} className="rounded border border-rose-300/40 px-2 py-1 text-rose-300">{text.deleteFeedback}</button>
+                    </div>
+                  </div>
+                ))}
+                {!feedbacks.length ? <p className="text-xs text-slate-400">{text.noFeedback}</p> : null}
+              </div>
+
               {selectedUser && (
-                <div className="mt-4 rounded-lg border border-cyan-300/30 bg-slate-900/80 p-4 text-sm">
-                  <p className="font-semibold text-cyan-200">User Dashboard: {selectedUser.name}</p>
-                  <p>Email: {selectedUser.email}</p>
-                  <p>Vai trò: {selectedUser.role}</p>
-                  <p>Số bài đã nộp: {selectedUser.stats?.historyCount ?? 0}</p>
-                  <p>Số bài cộng đồng: {selectedUser.stats?.postCount ?? 0}</p>
-                  <p>Chuỗi đăng nhập: {selectedUser.loginStreak ?? 0} ngày</p>
-                  <p>Tổng ngày đăng nhập: {selectedUser.totalLoginDays ?? 0}</p>
-                  <p>Lần đăng nhập gần nhất: {selectedUser.stats?.lastSessionAt ? new Date(selectedUser.stats.lastSessionAt).toLocaleString("vi-VN") : "-"}</p>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+                  <div className="w-full max-w-lg rounded-2xl border border-cyan-300/30 bg-slate-900 p-4 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold text-cyan-200">User Dashboard: {selectedUser.name}</p>
+                      <button onClick={() => setSelectedUser(null)} className="rounded-md border border-white/20 px-2 py-1 text-xs">{text.closeModal}</button>
+                    </div>
+                    <p className="mt-2">Email: {selectedUser.email}</p>
+                    <p>Role: {selectedUser.role}</p>
+                    <p>History: {selectedUser.stats?.historyCount ?? 0}</p>
+                    <p>Community posts: {selectedUser.stats?.postCount ?? 0}</p>
+                    <p>Login streak: {selectedUser.loginStreak ?? 0}</p>
+                    <p>Total login days: {selectedUser.totalLoginDays ?? 0}</p>
+                    <p>Last session: {selectedUser.stats?.lastSessionAt ? new Date(selectedUser.stats.lastSessionAt).toLocaleString(locale === "en" ? "en-US" : "vi-VN") : "-"}</p>
+                    {me?.isAdmin ? (
+                      <button onClick={() => { void deleteUser(selectedUser.id); }} className="mt-3 rounded-md border border-rose-300/40 px-3 py-2 text-rose-300">{text.deleteAccount}</button>
+                    ) : null}
+                  </div>
                 </div>
               )}
             </div>
           )}
         </section>
       </div>
+      {showFeedbackModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-cyan-300/30 bg-slate-900 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-semibold text-cyan-200">{text.feedback}</p>
+              <button onClick={() => setShowFeedbackModal(false)} className="rounded-md border border-white/20 px-2 py-1 text-xs">{text.closeModal}</button>
+            </div>
+            <textarea
+              value={feedbackInput}
+              onChange={(e) => setFeedbackInput(e.target.value)}
+              className="mt-3 h-28 w-full rounded-lg border border-white/15 bg-slate-800 p-2"
+              placeholder={text.feedbackPlaceholder}
+            />
+            {feedbackMsg ? <p className="mt-2 text-xs text-cyan-200">{feedbackMsg}</p> : null}
+            <button onClick={() => { void submitFeedback(); }} disabled={feedbackSending || !feedbackInput.trim()} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">{feedbackSending ? text.sending : text.send}</button>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

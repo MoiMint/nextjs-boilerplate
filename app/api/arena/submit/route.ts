@@ -14,6 +14,17 @@ export async function POST(request: NextRequest) {
   if (!prompt || !output) return NextResponse.json({ error: "Thiếu dữ liệu nộp bài." }, { status: 400 });
 
   const db = await readDB();
+  const arenaTitle = `Arena tuần: ${db.config.arenaWeekly.weekLabel}`;
+  const alreadySubmitted = db.histories.some(
+    (item) => item.userId === user.id && item.type === "arena" && item.title === arenaTitle,
+  );
+  if (alreadySubmitted) {
+    return NextResponse.json(
+      { error: "Bạn đã nộp bài cho đề Arena tuần này. Mỗi người chỉ được nộp 1 lần." },
+      { status: 409 },
+    );
+  }
+
   const golden = db.config.arenaWeekly.goldenResponse.toLowerCase();
   const out = output.toLowerCase();
 
@@ -38,12 +49,15 @@ export async function POST(request: NextRequest) {
     id: newId("his"),
     userId: user.id,
     type: "arena",
-    title: `Arena tuần: ${db.config.arenaWeekly.weekLabel}`,
+    title: arenaTitle,
     score: efficiency,
     feedback: `Accuracy ${accuracy}%, Tokens ${tokens}, Efficiency ${efficiency}.`,
     createdAt: new Date().toISOString(),
   });
 
+  const dbUser = db.users.find((item) => item.id === user.id);
+  if (dbUser) dbUser.coins += 35;
+
   await writeDB(db);
-  return NextResponse.json({ accuracy, tokens, efficiency });
+  return NextResponse.json({ accuracy, tokens, efficiency, reward: 35 });
 }
