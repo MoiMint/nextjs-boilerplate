@@ -2,84 +2,83 @@ import { NextRequest, NextResponse } from "next/server";
 
 type GeminiGenerateResponse = {
   candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  error?: { code?: number; message?: string; status?: string };
 };
 
-function normalizeModelName(name: string) {
-  return name.startsWith("models/") ? name.replace("models/", "") : name;
-}
+const GEMINI_MODEL = "gemini-2.5-flash";
 
-const DISABLED_MODEL_HINTS = ["tts", "image", "embedding", "vision"];
-
-function parseEnvModels() {
-  return (process.env.GEMINI_MODELS ?? "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash")
-    .split(",")
-    .map((m) => normalizeModelName(m.trim()))
-    .filter(Boolean)
-    .filter((m) => !DISABLED_MODEL_HINTS.some((hint) => m.toLowerCase().includes(hint)));
-}
+type CallModelResult = {
+  ok: true;
+  text: string;
+} | {
+  ok: false;
+  status: number;
+  errorText: string;
+};
 
 async function callModel(args: {
   apiKey: string;
   apiVersion: "v1beta" | "v1";
-  model: string;
   prompt: string;
   responseMimeType?: string;
-}) {
+  maxOutputTokens: number;
+}): Promise<CallModelResult> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/${args.apiVersion}/models/${args.model}:generateContent?key=${args.apiKey}`,
+    `https://generativelanguage.googleapis.com/${args.apiVersion}/models/${GEMINI_MODEL}:generateContent?key=${args.apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: args.prompt }] }],
-        generationConfig: args.responseMimeType ? { responseMimeType: args.responseMimeType } : undefined,
+        generationConfig: {
+          responseMimeType: args.responseMimeType,
+          temperature: 0.4,
+          maxOutputTokens: args.maxOutputTokens,
+        },
       }),
     },
   );
 
   if (response.ok) {
     const data = (await response.json()) as GeminiGenerateResponse;
-    return { ok: true as const, text: data.candidates?.[0]?.content?.parts?.[0]?.text ?? "" };
+    return { ok: true, text: data.candidates?.[0]?.content?.parts?.[0]?.text ?? "" };
   }
 
-  const status = response.status;
-  const errorText = await response.text();
-  return { ok: false as const, status, errorText };
+  return { ok: false, status: response.status, errorText: await response.text() };
 }
 
-async function runGemini(args: { apiKey: string; prompt: string; responseMimeType?: string }) {
-  const envModels = parseEnvModels();
-  const modelCandidates = envModels.length ? envModels.slice(0, 4) : ["gemini-2.5-flash", "gemini-2.0-flash"];
+async function runGemini(args: {
+  apiKey: string;
+  prompt: string;
+  responseMimeType?: string;
+  maxOutputTokens: number;
+}) {
   const apiVersions: Array<"v1beta" | "v1"> = ["v1beta", "v1"];
   const errors: string[] = [];
 
-  for (const model of modelCandidates) {
-    for (const apiVersion of apiVersions) {
-      const result = await callModel({
-        apiKey: args.apiKey,
-        apiVersion,
-        model,
-        prompt: args.prompt,
-        responseMimeType: args.responseMimeType,
-      });
+  for (const apiVersion of apiVersions) {
+    const result = await callModel({
+      apiKey: args.apiKey,
+      apiVersion,
+      prompt: args.prompt,
+      responseMimeType: args.responseMimeType,
+      maxOutputTokens: args.maxOutputTokens,
+    });
 
-      if (result.ok) {
-        return { ok: true as const, text: result.text, model, apiVersion };
-      }
+    if (result.ok) {
+      return { ok: true as const, text: result.text, model: GEMINI_MODEL, apiVersion };
+    }
 
-      errors.push(`${apiVersion}/${model} [${result.status}]`);
+    errors.push(`${apiVersion}/${GEMINI_MODEL} [${result.status}]`);
 
-      if (result.status === 400 || result.status === 404) {
-        break;
-      }
+    if (result.status === 429) {
+      return {
+        ok: false as const,
+        error: `Gemini rate limit (429). Attempts: ${errors.join(", ")}`,
+      };
+    }
 
-      if (result.status === 429) {
-        return {
-          ok: false as const,
-          error: `Gemini rate limit (429). Stop retry to avoid spam requests. Attempts: ${errors.join(", ")}`,
-        };
-      }
+    if (result.status === 400 || result.status === 404) {
+      break;
     }
   }
 
@@ -101,22 +100,18 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        {
-          error: "Chưa cấu hình GEMINI_API_KEY trên server. Hãy thêm key vào biến môi trường để dùng AI thật.",
-        },
+        { error: "Chưa cấu hình GEMINI_API_KEY trên server." },
         { status: 500 },
       );
     }
 
     if (mode === "generate") {
-      const generatorPrompt = `Bạn là AI thực thi prompt cho nền tảng Blabla.\nContext: ${context ?? "General"}\nHãy thực thi prompt người dùng và trả về nội dung trả lời tốt nhất ở dạng text thuần.\n\nPrompt người dùng:\n${prompt}`;
-      const result = await runGemini({ apiKey, prompt: generatorPrompt });
+      const generatorPrompt = `Bạn là AI thực thi prompt cho nền tảng Blabla.\nContext: ${context ?? "General"}\nYêu cầu bắt buộc:\n- Trả lời ngắn gọn, tối đa 5 câu hoặc 120 từ.\n- Chỉ đưa nội dung cốt lõi, không lan man.\n- Không mở đầu dài dòng.\n\nPrompt người dùng:\n${prompt}`;
+      const result = await runGemini({ apiKey, prompt: generatorPrompt, maxOutputTokens: 220 });
       if (!result.ok) {
         return NextResponse.json(
           {
-            error:
-              "Không gọi được model Gemini khả dụng để tạo nội dung. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS hoặc model access của project. Chi tiết: " +
-              result.error,
+            error: `Không gọi được Gemini 2.5 Flash để tạo nội dung. Chi tiết: ${result.error}`,
           },
           { status: 502 },
         );
@@ -125,15 +120,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ output: result.text, model: result.model, apiVersion: result.apiVersion });
     }
 
-    const userPrompt = `Bạn là AI Judge cho nền tảng Blabla.\nContext: ${context ?? "General"}\nNhiệm vụ:\n1) Chấm điểm 0-100.\n2) Feedback ngắn gọn 2-3 câu.\n3) Trả về JSON: {"score": number, "feedback": string}.\n\nPrompt người dùng:\n${prompt}`;
+    const userPrompt = `Bạn là AI Judge cho nền tảng Blabla.\nContext: ${context ?? "General"}\nNhiệm vụ:\n1) Chấm điểm 0-100.\n2) Feedback rất ngắn gọn, tối đa 2 câu.\n3) Trả về JSON đúng format: {"score": number, "feedback": string}.\n\nPrompt người dùng:\n${prompt}`;
 
-    const result = await runGemini({ apiKey, prompt: userPrompt, responseMimeType: "application/json" });
+    const result = await runGemini({
+      apiKey,
+      prompt: userPrompt,
+      responseMimeType: "application/json",
+      maxOutputTokens: 160,
+    });
     if (!result.ok) {
       return NextResponse.json(
         {
-          error:
-            "Không gọi được model Gemini khả dụng. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS hoặc model access của project. Chi tiết: " +
-            result.error,
+          error: `Không gọi được Gemini 2.5 Flash. Chi tiết: ${result.error}`,
         },
         { status: 502 },
       );
