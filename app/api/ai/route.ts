@@ -6,17 +6,66 @@ type GeminiGenerateResponse = {
 };
 
 function normalizeModelName(name: string) {
-  return name.startsWith("models/") ? name.replace("models/", "") : name;
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/^models\//, "")
+    .replace(/\s+/g, "-");
 }
 
 const DISABLED_MODEL_HINTS = ["tts", "image", "embedding", "vision"];
 
+// Keep defaults focused on models that are commonly available for low-cost / free-tier usage.
+const FREE_TIER_MODEL_FALLBACKS = [
+  "gemini-2.0-flash-lite",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+];
+
+function resolveModelAliases(input: string) {
+  const normalized = normalizeModelName(input);
+
+  const aliasMap: Record<string, string[]> = {
+    "gemini-2.0-flash": ["gemini-2.0-flash"],
+    "gemini-2.0-flash-lite": ["gemini-2.0-flash-lite", "gemini-2.0-flash"],
+    "gemini-1.5-flash": ["gemini-1.5-flash"],
+    "gemini-2.5-flash": ["gemini-2.0-flash", "gemini-1.5-flash"],
+    "gemini-2.5-flash-lite": ["gemini-2.0-flash-lite", "gemini-2.0-flash"],
+    "gemini-2.5-flash-tts": [],
+    "gemini-3-flash": ["gemini-2.0-flash", "gemini-1.5-flash"],
+  };
+
+  return aliasMap[normalized] ?? [normalized];
+}
+
+function isRunnableTextModel(model: string) {
+  return !DISABLED_MODEL_HINTS.some((hint) => model.includes(hint));
+}
+
 function parseEnvModels() {
-  return (process.env.GEMINI_MODELS ?? "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash")
+  const raw = (process.env.GEMINI_MODELS ?? "")
     .split(",")
-    .map((m) => normalizeModelName(m.trim()))
+    .map((m) => m.trim())
+    .filter(Boolean);
+
+  const expanded = raw.flatMap((model) => resolveModelAliases(model));
+
+  const combined = [...expanded, ...FREE_TIER_MODEL_FALLBACKS]
+    .map((model) => normalizeModelName(model))
     .filter(Boolean)
-    .filter((m) => !DISABLED_MODEL_HINTS.some((hint) => m.toLowerCase().includes(hint)));
+    .filter(isRunnableTextModel);
+
+  return combined.filter((model, index) => combined.indexOf(model) === index);
+}
+
+function compactErrorText(raw: string) {
+  const text = raw.replace(/\s+/g, " ").trim();
+  return text.length <= 180 ? text : `${text.slice(0, 180)}...`;
+}
+
+function isQuotaExceededError(raw: string) {
+  const normalized = raw.toLowerCase();
+  return normalized.includes("quota") || normalized.includes("billing") || normalized.includes("exceeded your current quota");
 }
 
 async function callModel(args: {
@@ -33,7 +82,11 @@ async function callModel(args: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: args.prompt }] }],
-        generationConfig: args.responseMimeType ? { responseMimeType: args.responseMimeType } : undefined,
+        generationConfig: {
+          ...(args.responseMimeType ? { responseMimeType: args.responseMimeType } : {}),
+          maxOutputTokens: 512,
+          temperature: 0.5,
+        },
       }),
     },
   );
@@ -50,7 +103,7 @@ async function callModel(args: {
 
 async function runGemini(args: { apiKey: string; prompt: string; responseMimeType?: string }) {
   const envModels = parseEnvModels();
-  const modelCandidates = envModels.length ? envModels.slice(0, 4) : ["gemini-2.5-flash", "gemini-2.0-flash"];
+  const modelCandidates = envModels.length ? envModels.slice(0, 4) : FREE_TIER_MODEL_FALLBACKS;
   const apiVersions: Array<"v1beta" | "v1"> = ["v1beta", "v1"];
   const errors: string[] = [];
 
@@ -68,22 +121,42 @@ async function runGemini(args: { apiKey: string; prompt: string; responseMimeTyp
         return { ok: true as const, text: result.text, model, apiVersion };
       }
 
-      errors.push(`${apiVersion}/${model} [${result.status}]`);
+      errors.push(`${apiVersion}/${model} [${result.status}] ${compactErrorText(result.errorText)}`);
 
-      if (result.status === 400 || result.status === 404) {
-        break;
-      }
-
-      if (result.status === 429) {
+      if (result.status === 429 && isQuotaExceededError(result.errorText)) {
         return {
           ok: false as const,
-          error: `Gemini rate limit (429). Stop retry to avoid spam requests. Attempts: ${errors.join(", ")}`,
+          error:
+            "Quota free-tier đã hết (429). Hãy chờ reset quota, giảm tần suất gọi AI, hoặc đổi API key/project còn quota. Attempts: " +
+            errors.join(" | "),
         };
       }
     }
   }
 
   return { ok: false as const, error: errors.join(" | ") };
+}
+
+function parseJudgeResult(text: string) {
+  const trimmed = text.trim();
+
+  const direct = (() => {
+    try {
+      return JSON.parse(trimmed) as { score?: number; feedback?: string };
+    } catch {
+      return null;
+    }
+  })();
+  if (direct) return direct;
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+  if (!fenced) return null;
+
+  try {
+    return JSON.parse(fenced) as { score?: number; feedback?: string };
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -102,7 +175,7 @@ export async function POST(request: NextRequest) {
     if (!apiKey) {
       return NextResponse.json(
         {
-          error: "Chưa cấu hình GEMINI_API_KEY trên server. Hãy thêm key vào biến môi trường để dùng AI thật.",
+          error: "Chưa cấu hình GEMINI_API_KEY trên server.",
         },
         { status: 500 },
       );
@@ -115,7 +188,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "Không gọi được model Gemini khả dụng để tạo nội dung. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS hoặc model access của project. Chi tiết: " +
+              "Không gọi được model Gemini free-tier khả dụng để tạo nội dung. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS/quota. Chi tiết: " +
               result.error,
           },
           { status: 502 },
@@ -132,24 +205,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Không gọi được model Gemini khả dụng. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS hoặc model access của project. Chi tiết: " +
+            "Không gọi được model Gemini free-tier khả dụng. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS/quota. Chi tiết: " +
             result.error,
         },
         { status: 502 },
       );
     }
 
-    try {
-      const parsed = JSON.parse(result.text) as { score?: number; feedback?: string };
-      return NextResponse.json({
-        score: parsed.score ?? 70,
-        feedback: parsed.feedback ?? "Không có feedback.",
-        model: result.model,
-        apiVersion: result.apiVersion,
-      });
-    } catch {
+    const parsed = parseJudgeResult(result.text);
+    if (!parsed) {
       return NextResponse.json({ score: 70, feedback: result.text, model: result.model, apiVersion: result.apiVersion });
     }
+
+    return NextResponse.json({
+      score: parsed.score ?? 70,
+      feedback: parsed.feedback ?? "Không có feedback.",
+      model: result.model,
+      apiVersion: result.apiVersion,
+    });
   } catch {
     return NextResponse.json({ error: "Không thể xử lý yêu cầu AI." }, { status: 500 });
   }
