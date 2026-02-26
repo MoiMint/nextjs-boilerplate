@@ -123,6 +123,23 @@ export type DBPost = {
   };
 };
 
+export type DBUserWeeklyGoal = {
+  id: string;
+  userId: string;
+  startsAt: string;
+  deadline: string;
+  targetMaster: number;
+  targetArena: number;
+  targetAuditor: number;
+  progressMaster: number;
+  progressArena: number;
+  progressAuditor: number;
+  completedAt: string | null;
+  rewardClaimedAt: string | null;
+  rewardCoins: number;
+  updatedAt: string;
+};
+
 export type DBFeedback = {
   id: string;
   userId: string;
@@ -160,6 +177,7 @@ export type DBShape = {
   posts: DBPost[];
   feedbacks: DBFeedback[];
   arenaSubmissions: DBArenaSubmission[];
+  userWeeklyGoals: DBUserWeeklyGoal[];
   config: DBConfig;
 };
 
@@ -306,6 +324,9 @@ const defaultConfig: DBConfig = {
     { id: "item-theme-pink", name: "Sơn hồng dashboard", image: "🎨", price: 180, effect: "Đổi dashboard sang chủ đề hồng", category: "dashboard-theme", themeKey: "pink" },
     { id: "item-theme-ocean", name: "Sơn đại dương", image: "🌊", price: 220, effect: "Đổi dashboard sang chủ đề đại dương", category: "dashboard-theme", themeKey: "ocean" },
     { id: "item-theme-violet", name: "Sơn tím galaxy", image: "🪐", price: 260, effect: "Đổi dashboard sang chủ đề tím", category: "dashboard-theme", themeKey: "violet" },
+    { id: "item-theme-sunset", name: "Sơn hoàng hôn", image: "🌇", price: 280, effect: "Gradient cam-hồng đổi màu liên tục", category: "dashboard-theme", themeKey: "sunset" },
+    { id: "item-theme-aurora", name: "Sơn cực quang", image: "🌌", price: 320, effect: "Gradient xanh-tím chuyển động", category: "dashboard-theme", themeKey: "aurora" },
+    { id: "item-theme-matrix", name: "Sơn matrix", image: "🟢", price: 300, effect: "Gradient xanh neon cyber", category: "dashboard-theme", themeKey: "matrix" },
     { id: "item-name-rainbow", name: "Tên cầu vồng", image: "🌈", price: 300, effect: "Màu tên gradient đổi liên tục", category: "name-style", nameStyleKey: "rainbow" },
     { id: "item-name-fire", name: "Tên lửa", image: "🔥", price: 280, effect: "Màu tên đỏ-cam nổi bật", category: "name-style", nameStyleKey: "fire" },
     { id: "item-name-ocean", name: "Tên đại dương", image: "🌊", price: 280, effect: "Màu tên xanh chuyển động", category: "name-style", nameStyleKey: "ocean" },
@@ -427,6 +448,7 @@ const defaultDB = (): DBShape => ({
   posts: [],
   feedbacks: [],
   arenaSubmissions: [],
+  userWeeklyGoals: [],
   config: defaultConfig,
 });
 
@@ -526,24 +548,42 @@ async function migrateLegacyPasswords(db: DBShape): Promise<boolean> {
 }
 
 function ensureConfig(config?: Partial<DBConfig>): DBConfig {
-  const normalizedLessons = (config?.promptMasterLessons?.length
-    ? config.promptMasterLessons
-    : defaultConfig.promptMasterLessons
-  ).map((lesson) => {
-    const legacy = lesson as PromptMasterLesson & { brief?: string; sample?: string };
-    return {
-      ...lesson,
-      situation: lesson.situation ?? legacy.brief ?? "",
-      overview: lesson.overview ?? legacy.brief ?? "",
-      methodGuide: lesson.methodGuide ?? legacy.sample ?? "",
-      practiceChallenge: lesson.practiceChallenge ?? legacy.brief ?? "",
-      samplePrompt: lesson.samplePrompt ?? legacy.sample ?? "",
-      price: lesson.price ?? 0,
-      approved: lesson.approved ?? true,
-      pendingApproval: lesson.pendingApproval ?? false,
-      createdByUserId: lesson.createdByUserId ?? "",
-    };
-  });
+  const mergedLessons = [
+    ...(config?.promptMasterLessons ?? []),
+    ...defaultConfig.promptMasterLessons,
+  ];
+  const normalizedLessons = mergedLessons
+    .filter((lesson) => !!lesson?.id)
+    .reduce<PromptMasterLesson[]>((acc, lesson) => {
+      if (acc.some((item) => item.id === lesson.id)) return acc;
+      const legacy = lesson as PromptMasterLesson & { brief?: string; sample?: string };
+      acc.push({
+        ...lesson,
+        situation: lesson.situation ?? legacy.brief ?? "",
+        overview: lesson.overview ?? legacy.brief ?? "",
+        methodGuide: lesson.methodGuide ?? legacy.sample ?? "",
+        practiceChallenge: lesson.practiceChallenge ?? legacy.brief ?? "",
+        samplePrompt: lesson.samplePrompt ?? legacy.sample ?? "",
+        price: lesson.price ?? 0,
+        approved: lesson.approved ?? true,
+        pendingApproval: lesson.pendingApproval ?? false,
+        createdByUserId: lesson.createdByUserId ?? "",
+      });
+      return acc;
+    }, []);
+
+  const mergedAuditorScenarios = [
+    ...(config?.auditorScenarios ?? []),
+    ...(config?.auditorScenario ? [config.auditorScenario] : []),
+    ...(defaultConfig.auditorScenarios ?? []),
+    defaultConfig.auditorScenario,
+  ]
+    .filter((scenario) => !!scenario?.title?.trim())
+    .reduce<AuditorScenario[]>((acc, scenario) => {
+      if (acc.some((item) => item.title === scenario.title)) return acc;
+      acc.push(scenario);
+      return acc;
+    }, []);
 
   const mergedShopItems = [
     ...(config?.shopItems ?? []),
@@ -569,10 +609,7 @@ function ensureConfig(config?: Partial<DBConfig>): DBConfig {
     promptMasterLessons: normalizedLessons,
     arenaWeekly: config?.arenaWeekly ?? defaultConfig.arenaWeekly,
     auditorScenario: config?.auditorScenario ?? defaultConfig.auditorScenario,
-    auditorScenarios:
-      config?.auditorScenarios?.length
-        ? config.auditorScenarios
-        : [config?.auditorScenario ?? defaultConfig.auditorScenario, ...(defaultConfig.auditorScenarios ?? [])],
+    auditorScenarios: mergedAuditorScenarios,
     arenaWeeklyRewards:
       config?.arenaWeeklyRewards?.length
         ? config.arenaWeeklyRewards
@@ -607,6 +644,21 @@ function ensureAdmin(db: DBShape): DBShape {
     };
   });
   db.arenaSubmissions = db.arenaSubmissions ?? [];
+  db.userWeeklyGoals = (db.userWeeklyGoals ?? []).map((goal) => ({
+    ...goal,
+    startsAt: goal.startsAt ?? new Date(Date.now() - 1000 * 60 * 60 * 24 * 6).toISOString(),
+    deadline: goal.deadline ?? new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
+    targetMaster: Math.max(0, Math.floor(goal.targetMaster ?? 0)),
+    targetArena: Math.max(0, Math.floor(goal.targetArena ?? 0)),
+    targetAuditor: Math.max(0, Math.floor(goal.targetAuditor ?? 0)),
+    progressMaster: Math.max(0, Math.floor(goal.progressMaster ?? 0)),
+    progressArena: Math.max(0, Math.floor(goal.progressArena ?? 0)),
+    progressAuditor: Math.max(0, Math.floor(goal.progressAuditor ?? 0)),
+    completedAt: goal.completedAt ?? null,
+    rewardClaimedAt: goal.rewardClaimedAt ?? null,
+    rewardCoins: Math.max(0, Math.floor(goal.rewardCoins ?? 120)),
+    updatedAt: goal.updatedAt ?? new Date().toISOString(),
+  }));
   db.posts = (db.posts ?? []).map((post) => ({
     ...post,
     type: post.type ?? "message",

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromToken, newId, readDB, writeDB } from "@/app/lib/server-db";
+import { updateGoalProgressFromHistory } from "@/app/lib/weekly-goals";
 
 export async function GET(request: NextRequest) {
   const token = request.headers.get("x-session-token");
@@ -48,7 +49,9 @@ export async function POST(request: NextRequest) {
     me.coins += reward;
   }
 
+  const goalUpdate = updateGoalProgressFromHistory(db, user.id, body.type);
+
   await writeDB(db);
 
-  return NextResponse.json({ ok: true, reward });
+  return NextResponse.json({ ok: true, reward, goalReward: goalUpdate.rewarded, goal: goalUpdate.goal });
 }
