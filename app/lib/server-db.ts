@@ -49,6 +49,11 @@ type ArenaWeeklyChallenge = {
   goldenResponse: string;
 };
 
+type ArenaWeeklyReward = {
+  rank: number;
+  coins: number;
+};
+
 type AuditorScenario = {
   title: string;
   wrongAnswer: string;
@@ -129,6 +134,7 @@ export type DBConfig = {
   arenaWeekly: ArenaWeeklyChallenge;
   auditorScenario: AuditorScenario;
   auditorScenarios?: AuditorScenario[];
+  arenaWeeklyRewards?: ArenaWeeklyReward[];
   shopItems: ShopItem[];
   courseSubmissions: CourseSubmission[];
   createCourseFee: number;
@@ -218,6 +224,46 @@ const defaultConfig: DBConfig = {
       samplePrompt:
         "Vai trò: Chuyên viên CSKH cao cấp. Nhiệm vụ: viết email xin lỗi chuyên nghiệp cho khách hàng bị giao trễ 5 ngày. Yêu cầu: giọng điệu đồng cảm, nêu 3 hành động khắc phục, kết thúc bằng ưu đãi 15%, tối đa 220 từ.",
     },
+    {
+      id: "pm-3",
+      title: "Phân tích phản hồi khách hàng theo chủ đề",
+      topic: "Data & Insight",
+      situation: "Bạn có 120 phản hồi sau sự kiện, đội vận hành cần biết 5 vấn đề nổi bật trong 1 giờ.",
+      overview: "Bài học giúp bạn thiết kế prompt để AI phân nhóm phản hồi, trích dẫn câu đại diện và đề xuất ưu tiên xử lý.",
+      methodGuide: "Áp dụng cấu trúc: Input schema rõ ràng, quy tắc gom nhóm, giới hạn số nhóm, và format output dạng bảng có độ ưu tiên.",
+      practiceChallenge: "Viết prompt để AI phân loại phản hồi thành tối đa 5 nhóm, mỗi nhóm có tỷ lệ %, ví dụ trích dẫn và đề xuất hành động.",
+      samplePrompt: "Bạn là CX Analyst. Hãy phân loại danh sách phản hồi thành tối đa 5 nhóm vấn đề, trả về bảng: Nhóm | Tỷ lệ | 2 câu trích dẫn | Hành động ưu tiên trong 7 ngày.",
+    },
+    {
+      id: "pm-4",
+      title: "Soạn SOP onboarding nhân sự mới",
+      topic: "Vận hành nhân sự",
+      situation: "Công ty tuyển liên tục nhưng onboarding chưa nhất quán, người mới thường thiếu thông tin trong tuần đầu.",
+      overview: "Bạn học cách viết prompt để AI tạo SOP onboarding theo timeline ngày 1-3-7-14 và checklist theo vai trò.",
+      methodGuide: "Nêu rõ vai trò người dùng, đầu ra bắt buộc (timeline/checklist/owner), tiêu chí đo lường hoàn thành, và giọng văn ngắn gọn dễ thực thi.",
+      practiceChallenge: "Viết prompt tạo SOP onboarding cho vị trí Sales Executive trong 14 ngày, có checklist và KPI hoàn thành.",
+      samplePrompt: "Đóng vai HR Operations Lead. Tạo SOP onboarding 14 ngày cho Sales Executive gồm: mục tiêu từng mốc, checklist công việc, người chịu trách nhiệm, KPI pass/fail.",
+    },
+    {
+      id: "pm-5",
+      title: "Thiết kế tutor AI chấm bài tự luận",
+      topic: "Giáo dục",
+      situation: "Giáo viên cần chấm 80 bài tự luận nhanh nhưng vẫn nhất quán rubric và có feedback cá nhân hóa.",
+      overview: "Bài học hướng dẫn tạo prompt để AI chấm theo rubric, chỉ ra điểm mạnh/yếu và gợi ý cải thiện theo từng học sinh.",
+      methodGuide: "Đưa rubric có trọng số, quy tắc không bịa thông tin, yêu cầu trích dẫn câu trong bài làm, output JSON dễ lưu trữ.",
+      practiceChallenge: "Viết prompt chấm bài tự luận thang 100 theo 4 tiêu chí, trả điểm từng tiêu chí + feedback cụ thể + đề xuất học tiếp.",
+      samplePrompt: "Bạn là trợ giảng môn Ngữ văn. Chấm bài theo rubric (Bố cục 20, Luận điểm 30, Dẫn chứng 30, Diễn đạt 20), trả JSON gồm điểm chi tiết, nhận xét mạnh/yếu và 3 hành động cải thiện.",
+    },
+    {
+      id: "pm-6",
+      title: "Tạo kế hoạch nội dung TikTok 30 ngày",
+      topic: "Marketing nội dung",
+      situation: "Team marketing cần lịch nội dung 30 ngày nhưng thiếu ý tưởng theo phễu awareness-consideration-conversion.",
+      overview: "Bạn sẽ tạo prompt để AI đề xuất lịch đăng, góc nội dung, CTA và chỉ số theo dõi cho từng video.",
+      methodGuide: "Chỉ định audience, mục tiêu kênh, trụ cột nội dung, định dạng output theo bảng ngày/chủ đề/hook/CTA/KPI, và ràng buộc tính khả thi sản xuất.",
+      practiceChallenge: "Viết prompt tạo content plan 30 ngày cho thương hiệu skincare, có hook 3 giây đầu và KPI chính cho từng bài.",
+      samplePrompt: "Bạn là Content Strategist TikTok. Lập kế hoạch 30 ngày cho brand skincare tuổi 18-24 theo 3 tầng phễu. Output bảng: Ngày | Chủ đề | Hook 3s | Kịch bản 30-45s | CTA | KPI chính.",
+    },
   ],
   arenaWeekly: {
     weekLabel: "Tuần 1",
@@ -225,6 +271,13 @@ const defaultConfig: DBConfig = {
     inputText: "Liên hệ: 0901234567, 0911222333, hotline 02873009999.",
     goldenResponse: '["0901234567","0911222333","02873009999"]',
   },
+  arenaWeeklyRewards: [
+    { rank: 1, coins: 500 },
+    { rank: 2, coins: 350 },
+    { rank: 3, coins: 250 },
+    { rank: 4, coins: 180 },
+    { rank: 5, coins: 120 },
+  ],
   auditorScenario: {
     title: "Bắt lỗi ảo giác trong báo cáo AI",
     wrongAnswer:
@@ -274,6 +327,51 @@ const defaultConfig: DBConfig = {
       requiredIssues: [
         "Không được tự ý ngừng thuốc kê đơn",
         "Cần khuyến nghị tham vấn bác sĩ trước khi thay đổi phác đồ",
+      ],
+    },
+    {
+      title: "Bắt lỗi SQL và bảo mật dữ liệu",
+      wrongAnswer:
+        "Hãy chạy câu SQL: SELECT * FROM users WHERE email = 'a@b.com' OR 1=1; để kiểm tra nhanh toàn bộ tài khoản.",
+      requiredIssues: [
+        "Có dấu hiệu SQL injection (OR 1=1)",
+        "Không được truy vấn toàn bộ dữ liệu người dùng trái mục đích",
+      ],
+    },
+    {
+      title: "Bắt lỗi tài chính doanh nghiệp",
+      wrongAnswer:
+        "Lợi nhuận ròng = Doanh thu + Chi phí vận hành, nên tháng này công ty càng tốn chi phí càng lời.",
+      requiredIssues: [
+        "Công thức đúng là Lợi nhuận ròng = Doanh thu - Tổng chi phí",
+        "Chi phí tăng không đồng nghĩa lợi nhuận tăng",
+      ],
+    },
+    {
+      title: "Bắt lỗi tư vấn pháp lý mơ hồ",
+      wrongAnswer:
+        "Bạn cứ sao chép nguyên điều khoản đối thủ vì trên internet ai cũng dùng như nhau, không cần kiểm tra pháp lý.",
+      requiredIssues: [
+        "Không thể sao chép điều khoản pháp lý của đơn vị khác một cách máy móc",
+        "Cần khuyến nghị tham vấn bộ phận pháp chế/luật sư",
+      ],
+    },
+    {
+      title: "Bắt lỗi phân tích A/B testing",
+      wrongAnswer:
+        "Biến thể B có 51 click và A có 49 click, vậy chắc chắn B tốt hơn và có ý nghĩa thống kê tuyệt đối.",
+      requiredIssues: [
+        "Chênh lệch nhỏ chưa đủ kết luận ý nghĩa thống kê",
+        "Cần kiểm tra cỡ mẫu, p-value hoặc độ tin cậy trước khi kết luận",
+      ],
+    },
+    {
+      title: "Bắt lỗi định hướng sản phẩm",
+      wrongAnswer:
+        "Vì 3 người dùng đầu tiên thích tính năng mới nên chúng ta nên bỏ toàn bộ roadmap cũ ngay lập tức.",
+      requiredIssues: [
+        "Mẫu 3 người dùng là quá nhỏ để quyết định chiến lược",
+        "Cần kết hợp dữ liệu định lượng/định tính trước khi đổi roadmap",
       ],
     },
   ],
@@ -392,6 +490,13 @@ function ensureConfig(config?: Partial<DBConfig>): DBConfig {
       config?.auditorScenarios?.length
         ? config.auditorScenarios
         : [config?.auditorScenario ?? defaultConfig.auditorScenario, ...(defaultConfig.auditorScenarios ?? [])],
+    arenaWeeklyRewards:
+      config?.arenaWeeklyRewards?.length
+        ? config.arenaWeeklyRewards
+            .filter((item) => Number(item?.rank) > 0)
+            .sort((a, b) => a.rank - b.rank)
+            .map((item) => ({ rank: Math.floor(item.rank), coins: Math.max(0, Math.floor(item.coins ?? 0)) }))
+        : defaultConfig.arenaWeeklyRewards,
     shopItems: uniqueShopItems,
     courseSubmissions: config?.courseSubmissions ?? [],
     createCourseFee: config?.createCourseFee ?? defaultConfig.createCourseFee,

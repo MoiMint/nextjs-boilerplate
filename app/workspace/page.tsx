@@ -92,11 +92,17 @@ type AuditorScenario = {
   requiredIssues: string[];
 };
 
+type ArenaWeeklyReward = {
+  rank: number;
+  coins: number;
+};
+
 type AppConfig = {
   promptMasterLessons: PromptMasterLesson[];
   arenaWeekly: ArenaWeekly;
   auditorScenario: AuditorScenario;
   auditorScenarios?: AuditorScenario[];
+  arenaWeeklyRewards?: ArenaWeeklyReward[];
   shopItems: ShopItem[];
   courseSubmissions: CourseSubmission[];
   createCourseFee: number;
@@ -1244,6 +1250,19 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               {alreadySubmittedArena ? <p className="mt-2 text-xs text-amber-300">Bạn đã nộp đề tuần này, mỗi người chỉ được trả lời 1 lần.</p> : null}
               <button onClick={() => { playUiSound(740); void submitArena(); }} disabled={arenaLoading || alreadySubmittedArena || !arenaPrompt.trim()} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">{arenaLoading ? "AI đang chấm..." : "Nộp Arena"}</button>
               {arenaResult ? <p className="mt-2 whitespace-pre-line text-sm">{arenaResult}</p> : null}
+
+              <div className="mt-4 rounded-xl border border-amber-300/25 bg-amber-500/10 p-3">
+                <p className="text-sm font-semibold text-amber-200">Thưởng Arena theo tuần ({config.arenaWeekly.weekLabel})</p>
+                <p className="mt-1 text-xs text-slate-300">Top 1-5 sẽ nhận thưởng Endless Coin khi admin chốt bảng xếp hạng tuần.</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {(config.arenaWeeklyRewards ?? []).map((reward) => (
+                    <div key={reward.rank} className="rounded-lg border border-amber-300/30 bg-slate-900/70 p-2 text-center text-xs">
+                      <p className="font-semibold text-amber-200">Top {reward.rank}</p>
+                      <p className="text-yellow-300">+{reward.coins} coin</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               <h3 className="mt-5 text-lg font-semibold text-cyan-200">Leaderboard Accuracy / Tokens</h3>
               <div className="mt-2 space-y-2">
