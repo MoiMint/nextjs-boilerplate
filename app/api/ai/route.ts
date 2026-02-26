@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Thiếu prompt." }, { status: 400 });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY ?? "AIzaSyDTZ1cKv5def_8C7Z4RsdZGk0NjGS3WeYE";
     if (!apiKey) {
       return NextResponse.json(
         {
