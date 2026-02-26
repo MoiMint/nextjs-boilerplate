@@ -75,6 +75,26 @@ function heuristicScore(input: string) {
   return Math.max(0, Math.min(95, Math.round(score)));
 }
 
+function fallbackGenerate(prompt: string, context?: string) {
+  const source = prompt
+    .replace(/\s+/g, " ")
+    .replace(/^Nhiệm vụ thực hành:\s*/i, "")
+    .trim();
+  const brief = source.slice(0, 260);
+  return `AI tạm quá tải nên hệ thống trả lời dự phòng.\nContext: ${context ?? "General"}.\nTóm tắt yêu cầu: ${brief || "Không có nội dung rõ ràng."}\nGợi ý: hãy nêu rõ Role - Task - Output - Constraints để nhận kết quả chính xác hơn.`;
+}
+
+function fallbackJudge(prompt: string) {
+  const score = heuristicScore(prompt);
+  const feedback = score < 30
+    ? "Prompt còn quá ngắn hoặc mơ hồ. Hãy nêu rõ mục tiêu, đầu ra và ràng buộc cụ thể."
+    : score < 60
+      ? "Prompt có ý chính nhưng thiếu cấu trúc rõ ràng. Bổ sung vai trò, định dạng output và tiêu chí đánh giá."
+      : "Prompt khá tốt. Bạn có thể tăng độ chính xác bằng ví dụ input/output và giới hạn cụ thể hơn.";
+
+  return { score, feedback };
+}
+
 async function callModel(args: {
   apiKey: string;
   apiVersion: "v1beta" | "v1";
@@ -158,10 +178,15 @@ export async function POST(request: NextRequest) {
       const result = await runGemini({ apiKey, prompt: generatorPrompt });
       if (!result.ok) {
         console.error("[AI generate] Gemini unavailable", result);
-        return NextResponse.json({ error: "AI đang bận, vui lòng thử lại sau 1-2 phút." }, { status: 502 });
+        return NextResponse.json({
+          output: fallbackGenerate(prompt, context),
+          model: "local-fallback",
+          apiVersion: "none",
+          fallback: true,
+        });
       }
 
-      return NextResponse.json({ output: normalizeFeedback(result.text, "Không có nội dung."), model: result.model, apiVersion: result.apiVersion });
+      return NextResponse.json({ output: normalizeFeedback(result.text, "Không có nội dung."), model: result.model, apiVersion: result.apiVersion, fallback: false });
     }
 
     const userPrompt = `Bạn là AI Judge cho nền tảng Blabla.\nContext: ${context ?? "General"}\nHãy chấm nghiêm khắc theo chất lượng thật sự:\n- Prompt mơ hồ/vô nghĩa/ngắn quá => điểm thấp (<30).\n- Prompt có cấu trúc, mục tiêu, ràng buộc rõ => điểm cao hơn.\nYêu cầu output: JSON duy nhất theo format {"score": number, "feedback": string}.\nFeedback tối đa 2 câu, ngắn gọn và cụ thể.\n\nPrompt người dùng:\n${prompt}`;
@@ -169,7 +194,14 @@ export async function POST(request: NextRequest) {
     const result = await runGemini({ apiKey, prompt: userPrompt, responseMimeType: "application/json" });
     if (!result.ok) {
       console.error("[AI judge] Gemini unavailable", result);
-      return NextResponse.json({ error: "AI đang bận, vui lòng thử lại sau 1-2 phút." }, { status: 502 });
+      const local = fallbackJudge(prompt);
+      return NextResponse.json({
+        score: local.score,
+        feedback: local.feedback,
+        model: "local-fallback",
+        apiVersion: "none",
+        fallback: true,
+      });
     }
 
     const parsed = extractJsonObject(result.text);
@@ -184,6 +216,7 @@ export async function POST(request: NextRequest) {
         feedback: normalizeFeedback(String(parsed.feedback ?? ""), "Cần nêu rõ mục tiêu, đầu ra và ràng buộc."),
         model: result.model,
         apiVersion: result.apiVersion,
+        fallback: false,
       });
     }
 
@@ -192,6 +225,7 @@ export async function POST(request: NextRequest) {
       feedback: normalizeFeedback(result.text, "Cần viết prompt rõ mục tiêu, đầu ra và tiêu chí."),
       model: result.model,
       apiVersion: result.apiVersion,
+      fallback: false,
     });
   } catch {
     return NextResponse.json({ error: "Không thể xử lý yêu cầu AI." }, { status: 500 });
