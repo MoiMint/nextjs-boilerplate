@@ -44,6 +44,14 @@ type Post = {
     creatorUserName: string;
   };
 };
+
+type FeedbackItem = {
+  id: string;
+  userId: string;
+  userName: string;
+  message: string;
+  createdAt: string;
+};
 type Tab = "dashboard" | "promptmaster" | "arena" | "auditor" | "history" | "community" | "garden" | "admin";
 type PromptMasterLesson = {
   id: string;
@@ -155,6 +163,21 @@ const I18N = {
     evaluating: "AI đang chấm...",
     gradePromptMaster: "Chấm Prompt Master",
     adminDeleteItem: "Xóa vật phẩm",
+    logout: "Đăng xuất",
+    feedback: "Gửi feedback",
+    send: "Gửi",
+    sending: "Đang gửi...",
+    feedbackPlaceholder: "Góp ý của bạn cho admin...",
+    feedbackSent: "Đã gửi feedback tới admin.",
+    feedbackListTitle: "Feedback người dùng",
+    noFeedback: "Chưa có feedback.",
+    deleteFeedback: "Xóa feedback",
+    viewDetail: "Xem chi tiết",
+    closeModal: "Đóng",
+    deleteAccount: "Xóa tài khoản",
+    contactTitle: "Liên hệ đại diện",
+    contactPhone: "Số điện thoại liên hệ (đại diện): 0352358392",
+    contactEmail: "Email (đại diện): ducnmfhl31907@gmail.com",
   },
   en: {
     shopTitle: "Dashboard Shop",
@@ -177,6 +200,21 @@ const I18N = {
     evaluating: "AI is grading...",
     gradePromptMaster: "Grade Prompt Master",
     adminDeleteItem: "Delete item",
+    logout: "Logout",
+    feedback: "Send feedback",
+    send: "Send",
+    sending: "Sending...",
+    feedbackPlaceholder: "Share your feedback to admin...",
+    feedbackSent: "Feedback sent to admin.",
+    feedbackListTitle: "User feedback",
+    noFeedback: "No feedback yet.",
+    deleteFeedback: "Delete feedback",
+    viewDetail: "View details",
+    closeModal: "Close",
+    deleteAccount: "Delete account",
+    contactTitle: "Representative contact",
+    contactPhone: "Contact phone (representative): 0352358392",
+    contactEmail: "Email (representative): ducnmfhl31907@gmail.com",
   },
 } as const;
 
@@ -200,6 +238,7 @@ export default function WorkspacePage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
 
   const [selectedLessonId, setSelectedLessonId] = useState<string>("");
@@ -269,6 +308,10 @@ export default function WorkspacePage() {
   const [lessonEditDraft, setLessonEditDraft] = useState<PromptMasterLesson | null>(null);
   const [showLearningModal, setShowLearningModal] = useState(false);
   const [harvestFxActive, setHarvestFxActive] = useState(false);
+  const [feedbackInput, setFeedbackInput] = useState("");
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackMsg, setFeedbackMsg] = useState("");
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   const token = typeof window !== "undefined" ? localStorage.getItem(SESSION_TOKEN_KEY) : null;
   const authHeaders = useMemo(
@@ -341,6 +384,13 @@ export default function WorkspacePage() {
     setAllUsers(data.users);
   }, [token]);
 
+  const loadFeedbacks = useCallback(async () => {
+    const res = await fetch("/api/feedback", { headers: { "x-session-token": token ?? "" } });
+    if (!res.ok) return;
+    const data = (await res.json()) as { feedbacks: FeedbackItem[] };
+    setFeedbacks(data.feedbacks);
+  }, [token]);
+
   const loadConfig = useCallback(async () => {
     const res = await fetch("/api/config", { headers: { "x-session-token": token ?? "" } });
     if (!res.ok) return;
@@ -374,8 +424,9 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (me?.isAdmin) {
       loadUsers();
+      loadFeedbacks();
     }
-  }, [me, loadUsers]);
+  }, [me, loadUsers, loadFeedbacks]);
 
   useEffect(() => {
     if (!token) return;
@@ -905,6 +956,57 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     }
   };
 
+  const submitFeedback = async () => {
+    if (!feedbackInput.trim()) return;
+    setFeedbackSending(true);
+    setFeedbackMsg("");
+    const res = await fetch("/api/feedback", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ message: feedbackInput }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setFeedbackMsg(data.error ?? "Không gửi được feedback.");
+      setFeedbackSending(false);
+      return;
+    }
+    setFeedbackInput("");
+    setFeedbackMsg(text.feedbackSent);
+    setFeedbackSending(false);
+    setShowFeedbackModal(false);
+  };
+
+  const deleteFeedback = async (feedbackId: string) => {
+    const res = await fetch("/api/feedback", {
+      method: "DELETE",
+      headers: authHeaders,
+      body: JSON.stringify({ feedbackId }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setAdminMsg(data.error ?? "Không xóa được feedback.");
+      return;
+    }
+    setFeedbacks((prev) => prev.filter((item) => item.id !== feedbackId));
+  };
+
+  const deleteUser = async (userId: string) => {
+    const res = await fetch("/api/admin/users", {
+      method: "DELETE",
+      headers: authHeaders,
+      body: JSON.stringify({ userId }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setAdminMsg(data.error ?? "Không xóa được tài khoản.");
+      return;
+    }
+    setSelectedUser(null);
+    setAdminMsg("Đã xóa tài khoản người dùng.");
+    await loadUsers();
+  };
+
   const unlockable = (lesson: PromptMasterLesson) => (lesson.price ?? 0) > 0 && !(me?.unlockedLessonIds ?? []).includes(lesson.id);
 
   const openLessonEditor = (lesson: PromptMasterLesson) => {
@@ -986,7 +1088,13 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
             }}
             className="mt-6 w-full rounded-lg border border-white/20 px-3 py-2"
           >
-            Đăng xuất
+            {text.logout}
+          </button>
+          <button
+            onClick={() => setShowFeedbackModal(true)}
+            className="mt-2 w-full rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200"
+          >
+            {text.feedback}
           </button>
         </aside>
 
@@ -1006,6 +1114,11 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
               {dashboardDecorVisual ? <p className="mt-1 text-xs text-cyan-200">✨ Trang trí: {dashboardDecorVisual}</p> : null}
               <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
+              <div className="mt-3 rounded-lg border border-cyan-300/20 bg-slate-900/60 p-3 text-xs text-cyan-100">
+                <p className="font-semibold">{text.contactTitle}</p>
+                <p className="mt-1">{text.contactPhone}</p>
+                <p>{text.contactEmail}</p>
+              </div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
                   <p className="font-semibold text-cyan-200">Hiệu suất Arena</p>
@@ -1535,28 +1648,69 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <div key={user.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
                     <div className="flex items-center justify-between gap-3">
                       <p>{user.name} - {user.email} ({user.role})</p>
-                      <button onClick={()=>setSelectedUser(user)} className="rounded-md border border-cyan-300/40 px-2 py-1 text-xs text-cyan-200">Xem chi tiết</button>
+                      <button onClick={()=>setSelectedUser(user)} className="rounded-md border border-cyan-300/40 px-2 py-1 text-xs text-cyan-200">{text.viewDetail}</button>
                     </div>
                   </div>
                 ))}
               </div>
 
+              <h3 className="mt-4 font-semibold text-amber-200">{text.feedbackListTitle}</h3>
+              <div className="mt-2 space-y-2">
+                {feedbacks.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-white/10 bg-slate-900/60 p-3 text-xs">
+                    <p className="font-semibold text-cyan-100">{item.userName}</p>
+                    <p className="mt-1 whitespace-pre-line text-slate-200">{item.message}</p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <p className="text-slate-400">{new Date(item.createdAt).toLocaleString(locale === "en" ? "en-US" : "vi-VN")}</p>
+                      <button onClick={() => { void deleteFeedback(item.id); }} className="rounded border border-rose-300/40 px-2 py-1 text-rose-300">{text.deleteFeedback}</button>
+                    </div>
+                  </div>
+                ))}
+                {!feedbacks.length ? <p className="text-xs text-slate-400">{text.noFeedback}</p> : null}
+              </div>
+
               {selectedUser && (
-                <div className="mt-4 rounded-lg border border-cyan-300/30 bg-slate-900/80 p-4 text-sm">
-                  <p className="font-semibold text-cyan-200">User Dashboard: {selectedUser.name}</p>
-                  <p>Email: {selectedUser.email}</p>
-                  <p>Vai trò: {selectedUser.role}</p>
-                  <p>Số bài đã nộp: {selectedUser.stats?.historyCount ?? 0}</p>
-                  <p>Số bài cộng đồng: {selectedUser.stats?.postCount ?? 0}</p>
-                  <p>Chuỗi đăng nhập: {selectedUser.loginStreak ?? 0} ngày</p>
-                  <p>Tổng ngày đăng nhập: {selectedUser.totalLoginDays ?? 0}</p>
-                  <p>Lần đăng nhập gần nhất: {selectedUser.stats?.lastSessionAt ? new Date(selectedUser.stats.lastSessionAt).toLocaleString("vi-VN") : "-"}</p>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+                  <div className="w-full max-w-lg rounded-2xl border border-cyan-300/30 bg-slate-900 p-4 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold text-cyan-200">User Dashboard: {selectedUser.name}</p>
+                      <button onClick={() => setSelectedUser(null)} className="rounded-md border border-white/20 px-2 py-1 text-xs">{text.closeModal}</button>
+                    </div>
+                    <p className="mt-2">Email: {selectedUser.email}</p>
+                    <p>Role: {selectedUser.role}</p>
+                    <p>History: {selectedUser.stats?.historyCount ?? 0}</p>
+                    <p>Community posts: {selectedUser.stats?.postCount ?? 0}</p>
+                    <p>Login streak: {selectedUser.loginStreak ?? 0}</p>
+                    <p>Total login days: {selectedUser.totalLoginDays ?? 0}</p>
+                    <p>Last session: {selectedUser.stats?.lastSessionAt ? new Date(selectedUser.stats.lastSessionAt).toLocaleString(locale === "en" ? "en-US" : "vi-VN") : "-"}</p>
+                    {me?.isAdmin ? (
+                      <button onClick={() => { void deleteUser(selectedUser.id); }} className="mt-3 rounded-md border border-rose-300/40 px-3 py-2 text-rose-300">{text.deleteAccount}</button>
+                    ) : null}
+                  </div>
                 </div>
               )}
             </div>
           )}
         </section>
       </div>
+      {showFeedbackModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-cyan-300/30 bg-slate-900 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-semibold text-cyan-200">{text.feedback}</p>
+              <button onClick={() => setShowFeedbackModal(false)} className="rounded-md border border-white/20 px-2 py-1 text-xs">{text.closeModal}</button>
+            </div>
+            <textarea
+              value={feedbackInput}
+              onChange={(e) => setFeedbackInput(e.target.value)}
+              className="mt-3 h-28 w-full rounded-lg border border-white/15 bg-slate-800 p-2"
+              placeholder={text.feedbackPlaceholder}
+            />
+            {feedbackMsg ? <p className="mt-2 text-xs text-cyan-200">{feedbackMsg}</p> : null}
+            <button onClick={() => { void submitFeedback(); }} disabled={feedbackSending || !feedbackInput.trim()} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">{feedbackSending ? text.sending : text.send}</button>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

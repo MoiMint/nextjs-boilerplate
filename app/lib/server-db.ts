@@ -118,6 +118,14 @@ export type DBPost = {
   };
 };
 
+export type DBFeedback = {
+  id: string;
+  userId: string;
+  userName: string;
+  message: string;
+  createdAt: string;
+};
+
 export type DBArenaSubmission = {
   id: string;
   userId: string;
@@ -145,6 +153,7 @@ export type DBShape = {
   sessions: DBSession[];
   histories: DBHistory[];
   posts: DBPost[];
+  feedbacks: DBFeedback[];
   arenaSubmissions: DBArenaSubmission[];
   config: DBConfig;
 };
@@ -407,6 +416,7 @@ const defaultDB = (): DBShape => ({
   sessions: [],
   histories: [],
   posts: [],
+  feedbacks: [],
   arenaSubmissions: [],
   config: defaultConfig,
 });
@@ -509,6 +519,7 @@ function ensureAdmin(db: DBShape): DBShape {
     db.users.unshift(adminSeed);
   }
 
+  db.feedbacks = db.feedbacks ?? [];
   db.arenaSubmissions = db.arenaSubmissions ?? [];
   db.posts = (db.posts ?? []).map((post) => ({
     ...post,
