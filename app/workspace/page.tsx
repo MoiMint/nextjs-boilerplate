@@ -580,13 +580,11 @@ ${auditorRePrompt}`;
       body: JSON.stringify({ context: "AI Auditor Correction", mode: "generate", prompt: correctedAnswerPrompt }),
     });
     const correctionData = (await correctionRes.json()) as { output?: string; error?: string };
-    if (!correctionRes.ok || !correctionData.output?.trim()) {
-      setAuditorResult("AI đang quá tải hoặc hết lượt model ở bước sửa câu trả lời. Vui lòng thử lại sau vài phút.");
-      setAuditorLoading(false);
-      return;
-    }
+    const correctedAnswer = correctionRes.ok && correctionData.output?.trim()
+      ? correctionData.output
+      : `${auditorRePrompt}
 
-    const correctedAnswer = correctionData.output;
+(Tạm dùng prompt sửa của bạn do AI quá tải ở bước sinh câu trả lời.)`;
 
     const judgePrompt = `Danh sách lỗi đúng cần tìm: ${scenario.requiredIssues.join(", ")}
 Người dùng phát hiện lỗi: ${auditorIssues}
@@ -601,14 +599,17 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     });
 
     const data = (await res.json()) as { score?: number; feedback?: string; error?: string };
-    if (!res.ok) {
-      setAuditorResult("Không thể chấm điểm Auditor lúc này do giới hạn model. Vui lòng thử lại sau.");
-      setAuditorLoading(false);
-      return;
-    }
+    const fallbackScore = (() => {
+      const combined = `${auditorIssues} ${correctedAnswer}`.toLowerCase();
+      const hits = scenario.requiredIssues.filter((item) => combined.includes(item.toLowerCase())).length;
+      const ratio = scenario.requiredIssues.length ? hits / scenario.requiredIssues.length : 0.5;
+      return Math.max(55, Math.min(95, Math.round(55 + ratio * 40)));
+    })();
 
-    const score = data.score ?? 75;
-    const feedback = data.feedback ?? "Không có nhận xét.";
+    const score = res.ok ? (data.score ?? 75) : fallbackScore;
+    const feedback = res.ok
+      ? (data.feedback ?? "Không có nhận xét.")
+      : "AI chấm điểm đang quá tải, hệ thống tạm chấm theo mức độ khớp lỗi bạn phát hiện. Bạn có thể gửi lại để lấy chấm điểm AI đầy đủ.";
 
     await fetch("/api/history", {
       method: "POST",

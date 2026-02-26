@@ -5,6 +5,7 @@ type GeminiGenerateResponse = {
 };
 
 const GEMINI_MODEL = "gemini-2.5-flash";
+const RETRYABLE_STATUS = new Set([429, 500, 503]);
 
 type CallModelResult = {
   ok: true;
@@ -14,6 +15,39 @@ type CallModelResult = {
   status: number;
   errorText: string;
 };
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractJsonObject(text: string) {
+  const trimmed = text.trim();
+  try {
+    return JSON.parse(trimmed) as { score?: number; feedback?: string };
+  } catch {
+    // continue
+  }
+
+  const jsonBlock = trimmed.match(/\{[\s\S]*\}/);
+  if (!jsonBlock) return null;
+
+  try {
+    return JSON.parse(jsonBlock[0]) as { score?: number; feedback?: string };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeFeedback(text: string, fallback = "Không có feedback.") {
+  const compact = text
+    .replace(/```json|```/gi, "")
+    .replace(/Here is (the )?JSON(?: request| response)?[:\s]*/gi, "")
+    .trim();
+
+  if (!compact) return fallback;
+  const sentences = compact.split(/(?<=[.!?])\s+/).filter(Boolean);
+  return (sentences.slice(0, 2).join(" ") || compact).slice(0, 280);
+}
 
 async function callModel(args: {
   apiKey: string;
@@ -31,7 +65,7 @@ async function callModel(args: {
         contents: [{ parts: [{ text: args.prompt }] }],
         generationConfig: {
           responseMimeType: args.responseMimeType,
-          temperature: 0.4,
+          temperature: 0.35,
           maxOutputTokens: args.maxOutputTokens,
         },
       }),
@@ -56,29 +90,28 @@ async function runGemini(args: {
   const errors: string[] = [];
 
   for (const apiVersion of apiVersions) {
-    const result = await callModel({
-      apiKey: args.apiKey,
-      apiVersion,
-      prompt: args.prompt,
-      responseMimeType: args.responseMimeType,
-      maxOutputTokens: args.maxOutputTokens,
-    });
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const result = await callModel({
+        apiKey: args.apiKey,
+        apiVersion,
+        prompt: args.prompt,
+        responseMimeType: args.responseMimeType,
+        maxOutputTokens: args.maxOutputTokens,
+      });
 
-    if (result.ok) {
-      return { ok: true as const, text: result.text, model: GEMINI_MODEL, apiVersion };
-    }
+      if (result.ok) {
+        return { ok: true as const, text: result.text, model: GEMINI_MODEL, apiVersion };
+      }
 
-    errors.push(`${apiVersion}/${GEMINI_MODEL} [${result.status}]`);
+      errors.push(`${apiVersion}/${GEMINI_MODEL} [${result.status}]#${attempt}`);
 
-    if (result.status === 429) {
-      return {
-        ok: false as const,
-        error: `Gemini rate limit (429). Attempts: ${errors.join(", ")}`,
-      };
-    }
+      if (!RETRYABLE_STATUS.has(result.status)) {
+        break;
+      }
 
-    if (result.status === 400 || result.status === 404) {
-      break;
+      if (attempt < 3) {
+        await wait(250 * attempt);
+      }
     }
   }
 
@@ -106,8 +139,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (mode === "generate") {
-      const generatorPrompt = `Bạn là AI thực thi prompt cho nền tảng Blabla.\nContext: ${context ?? "General"}\nYêu cầu bắt buộc:\n- Trả lời ngắn gọn, tối đa 5 câu hoặc 120 từ.\n- Chỉ đưa nội dung cốt lõi, không lan man.\n- Không mở đầu dài dòng.\n\nPrompt người dùng:\n${prompt}`;
-      const result = await runGemini({ apiKey, prompt: generatorPrompt, maxOutputTokens: 220 });
+      const generatorPrompt = `Bạn là AI thực thi prompt cho nền tảng Blabla.\nContext: ${context ?? "General"}\nYêu cầu bắt buộc:\n- Trả lời ngắn gọn, tối đa 5 câu hoặc 140 từ.\n- Chỉ đưa nội dung cốt lõi, không lan man.\n- Không mở đầu dài dòng.\n\nPrompt người dùng:\n${prompt}`;
+      const result = await runGemini({ apiKey, prompt: generatorPrompt, maxOutputTokens: 320 });
       if (!result.ok) {
         return NextResponse.json(
           {
@@ -117,16 +150,16 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      return NextResponse.json({ output: result.text, model: result.model, apiVersion: result.apiVersion });
+      return NextResponse.json({ output: normalizeFeedback(result.text, "Không có nội dung."), model: result.model, apiVersion: result.apiVersion });
     }
 
-    const userPrompt = `Bạn là AI Judge cho nền tảng Blabla.\nContext: ${context ?? "General"}\nNhiệm vụ:\n1) Chấm điểm 0-100.\n2) Feedback rất ngắn gọn, tối đa 2 câu.\n3) Trả về JSON đúng format: {"score": number, "feedback": string}.\n\nPrompt người dùng:\n${prompt}`;
+    const userPrompt = `Bạn là AI Judge cho nền tảng Blabla.\nContext: ${context ?? "General"}\nNhiệm vụ:\n1) Chấm điểm 0-100.\n2) Feedback rất ngắn gọn, tối đa 2 câu.\n3) Trả về JSON đúng format: {"score": number, "feedback": string}.\n4) Tuyệt đối không thêm văn bản ngoài JSON.\n\nPrompt người dùng:\n${prompt}`;
 
     const result = await runGemini({
       apiKey,
       prompt: userPrompt,
       responseMimeType: "application/json",
-      maxOutputTokens: 160,
+      maxOutputTokens: 220,
     });
     if (!result.ok) {
       return NextResponse.json(
@@ -137,17 +170,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    try {
-      const parsed = JSON.parse(result.text) as { score?: number; feedback?: string };
+    const parsed = extractJsonObject(result.text);
+    if (parsed) {
       return NextResponse.json({
-        score: parsed.score ?? 70,
-        feedback: parsed.feedback ?? "Không có feedback.",
+        score: Math.max(0, Math.min(100, Number(parsed.score ?? 70))),
+        feedback: normalizeFeedback(String(parsed.feedback ?? "")),
         model: result.model,
         apiVersion: result.apiVersion,
       });
-    } catch {
-      return NextResponse.json({ score: 70, feedback: result.text, model: result.model, apiVersion: result.apiVersion });
     }
+
+    return NextResponse.json({
+      score: 70,
+      feedback: normalizeFeedback(result.text),
+      model: result.model,
+      apiVersion: result.apiVersion,
+    });
   } catch {
     return NextResponse.json({ error: "Không thể xử lý yêu cầu AI." }, { status: 500 });
   }
