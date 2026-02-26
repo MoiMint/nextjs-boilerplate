@@ -509,6 +509,13 @@ async function migrateLegacyPasswords(db: DBShape): Promise<boolean> {
     if (!user.passwordHash) {
       user.passwordHash = await hashPassword(crypto.randomUUID());
       hasChanges = true;
+      continue;
+    }
+
+    const isCurrentHash = user.passwordHash.startsWith(`${HASH_PREFIX}$`);
+    if (!isCurrentHash) {
+      user.passwordHash = await hashPassword(user.passwordHash);
+      hasChanges = true;
     }
   }
 
