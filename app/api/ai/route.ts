@@ -137,7 +137,7 @@ async function runGemini(args: {
     }
   }
 
-  return { ok: false as const, error: errors.join(" | ") };
+  return { ok: false as const, error: "MODEL_UNAVAILABLE", details: errors.join(" | ") };
 }
 
 export async function POST(request: NextRequest) {
@@ -157,7 +157,8 @@ export async function POST(request: NextRequest) {
       const generatorPrompt = `Bạn là AI thực thi prompt cho nền tảng Blabla.\nContext: ${context ?? "General"}\nYêu cầu bắt buộc: trả lời ngắn gọn, rõ ý, đi thẳng vào kết quả; không lan man.\n\nPrompt người dùng:\n${prompt}`;
       const result = await runGemini({ apiKey, prompt: generatorPrompt });
       if (!result.ok) {
-        return NextResponse.json({ error: `Không gọi được Gemini khả dụng để tạo nội dung. Chi tiết: ${result.error}` }, { status: 502 });
+        console.error("[AI generate] Gemini unavailable", result);
+        return NextResponse.json({ error: "AI đang bận, vui lòng thử lại sau 1-2 phút." }, { status: 502 });
       }
 
       return NextResponse.json({ output: normalizeFeedback(result.text, "Không có nội dung."), model: result.model, apiVersion: result.apiVersion });
@@ -167,7 +168,8 @@ export async function POST(request: NextRequest) {
 
     const result = await runGemini({ apiKey, prompt: userPrompt, responseMimeType: "application/json" });
     if (!result.ok) {
-      return NextResponse.json({ error: `Không gọi được Gemini khả dụng. Chi tiết: ${result.error}` }, { status: 502 });
+      console.error("[AI judge] Gemini unavailable", result);
+      return NextResponse.json({ error: "AI đang bận, vui lòng thử lại sau 1-2 phút." }, { status: 502 });
     }
 
     const parsed = extractJsonObject(result.text);

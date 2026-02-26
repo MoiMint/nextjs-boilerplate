@@ -422,9 +422,12 @@ ${masterPrompt}`;
       body: JSON.stringify({ context: "Prompt Master Practice", mode: "generate", prompt: aiRunPrompt }),
     });
     const aiRunData = (await aiRunRes.json()) as { output?: string; error?: string };
-    const generatedOutput = aiRunRes.ok
-      ? aiRunData.output ?? "AI chưa tạo được output."
-      : aiRunData.error ?? "AI không tạo được output.";
+    if (!aiRunRes.ok || !aiRunData.output?.trim()) {
+      setMasterResult(aiRunData.error ?? "AI đang bận, chưa tạo được output cho Prompt Master. Vui lòng thử lại sau ít phút.");
+      setMasterLoading(false);
+      return;
+    }
+    const generatedOutput = aiRunData.output;
 
     const reviewerPrompt = `Bạn là reviewer chỉ tập trung vào chất lượng prompt, KHÔNG biết nội dung đề bài cụ thể.
 Hãy đánh giá prompt sau theo tiêu chí rõ vai trò, rõ output, ràng buộc và khả năng lặp cải tiến.
@@ -440,7 +443,7 @@ ${masterPrompt}`;
     const reviewerData = (await reviewerRes.json()) as { score?: number; feedback?: string; error?: string };
     const reviewerFeedback = reviewerRes.ok
       ? reviewerData.feedback ?? "Reviewer chưa có phản hồi."
-      : reviewerData.error ?? "Reviewer gặp lỗi.";
+      : "Reviewer tạm thời quá tải, hệ thống sẽ dùng tổng kết cuối để chấm.";
 
     const auditorPrompt = `Bạn là AI tổng kết biết đầy đủ bối cảnh bài học.
 Thông tin bài học:
@@ -467,10 +470,12 @@ Nhiệm vụ: tự kiểm tra output AI và phản hồi reviewer đã bám yêu
     });
 
     const finalData = (await finalRes.json()) as { score?: number; feedback?: string; error?: string };
-    const score = finalRes.ok ? finalData.score ?? 72 : 60;
+    const localPromptWords = masterPrompt.trim().split(/\s+/).filter(Boolean).length;
+    const localScore = Math.max(45, Math.min(92, Math.round(45 + Math.min(40, localPromptWords * 1.2))));
+    const score = finalRes.ok ? finalData.score ?? 72 : localScore;
     const finalFeedback = finalRes.ok
       ? finalData.feedback ?? "Không có nhận xét cuối."
-      : finalData.error ?? "AI tổng kết lỗi.";
+      : "AI tổng kết đang quá tải, hệ thống tạm chấm theo độ rõ ràng prompt. Bạn có thể nộp lại để lấy tổng kết AI đầy đủ.";
 
     await fetch("/api/history", {
       method: "POST",
