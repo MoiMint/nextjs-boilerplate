@@ -4,10 +4,6 @@ type GeminiGenerateResponse = {
   candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
 };
 
-const PRIMARY_MODEL = "gemini-2.5-flash";
-const FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"];
-const RETRYABLE_STATUS = new Set([429, 500, 503]);
-
 type CallModelResult =
   | {
       ok: true;
@@ -17,7 +13,20 @@ type CallModelResult =
       ok: false;
       status: number;
       errorText: string;
+      retryAfterMs?: number;
     };
+
+const DEFAULT_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+const RETRYABLE_STATUS = new Set([429, 500, 503]);
+let globalRateLimitedUntil = 0;
+
+function parseModels() {
+  const envModels = (process.env.GEMINI_MODELS ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return envModels.length ? envModels : DEFAULT_MODELS;
+}
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -75,24 +84,16 @@ function heuristicScore(input: string) {
   return Math.max(0, Math.min(95, Math.round(score)));
 }
 
-function fallbackGenerate(prompt: string, context?: string) {
-  const source = prompt
-    .replace(/\s+/g, " ")
-    .replace(/^Nhiệm vụ thực hành:\s*/i, "")
-    .trim();
-  const brief = source.slice(0, 260);
-  return `AI tạm quá tải nên hệ thống trả lời dự phòng.\nContext: ${context ?? "General"}.\nTóm tắt yêu cầu: ${brief || "Không có nội dung rõ ràng."}\nGợi ý: hãy nêu rõ Role - Task - Output - Constraints để nhận kết quả chính xác hơn.`;
-}
-
-function fallbackJudge(prompt: string) {
-  const score = heuristicScore(prompt);
-  const feedback = score < 30
-    ? "Prompt còn quá ngắn hoặc mơ hồ. Hãy nêu rõ mục tiêu, đầu ra và ràng buộc cụ thể."
-    : score < 60
-      ? "Prompt có ý chính nhưng thiếu cấu trúc rõ ràng. Bổ sung vai trò, định dạng output và tiêu chí đánh giá."
-      : "Prompt khá tốt. Bạn có thể tăng độ chính xác bằng ví dụ input/output và giới hạn cụ thể hơn.";
-
-  return { score, feedback };
+function parseRetryAfterMs(response: Response) {
+  const raw = response.headers.get("retry-after");
+  if (!raw) return undefined;
+  const asNumber = Number(raw);
+  if (Number.isFinite(asNumber) && asNumber > 0) return asNumber * 1000;
+  const asDate = new Date(raw).getTime();
+  if (!Number.isNaN(asDate)) {
+    return Math.max(0, asDate - Date.now());
+  }
+  return undefined;
 }
 
 async function callModel(args: {
@@ -122,7 +123,12 @@ async function callModel(args: {
     return { ok: true, text: data.candidates?.[0]?.content?.parts?.[0]?.text ?? "" };
   }
 
-  return { ok: false, status: response.status, errorText: await response.text() };
+  return {
+    ok: false,
+    status: response.status,
+    errorText: await response.text(),
+    retryAfterMs: parseRetryAfterMs(response),
+  };
 }
 
 async function runGemini(args: {
@@ -130,13 +136,18 @@ async function runGemini(args: {
   prompt: string;
   responseMimeType?: string;
 }) {
+  const now = Date.now();
+  if (globalRateLimitedUntil > now) {
+    await wait(globalRateLimitedUntil - now);
+  }
+
   const apiVersions: Array<"v1beta" | "v1"> = ["v1beta", "v1"];
-  const modelCandidates = [PRIMARY_MODEL, ...FALLBACK_MODELS];
+  const models = parseModels();
   const errors: string[] = [];
 
-  for (const model of modelCandidates) {
+  for (const model of models) {
     for (const apiVersion of apiVersions) {
-      for (let attempt = 1; attempt <= 3; attempt += 1) {
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
         const result = await callModel({
           apiKey: args.apiKey,
           apiVersion,
@@ -152,12 +163,20 @@ async function runGemini(args: {
         errors.push(`${apiVersion}/${model} [${result.status}]#${attempt}`);
 
         if (!RETRYABLE_STATUS.has(result.status)) break;
-        if (attempt < 3) await wait(250 * attempt);
+
+        const retryWait = Math.max(result.retryAfterMs ?? 0, 1200 * attempt);
+        if (result.status === 429) {
+          globalRateLimitedUntil = Date.now() + retryWait;
+        }
+
+        if (attempt < 2) {
+          await wait(retryWait);
+        }
       }
     }
   }
 
-  return { ok: false as const, error: "MODEL_UNAVAILABLE", details: errors.join(" | ") };
+  return { ok: false as const, details: errors.join(" | ") };
 }
 
 export async function POST(request: NextRequest) {
@@ -177,31 +196,19 @@ export async function POST(request: NextRequest) {
       const generatorPrompt = `Bạn là AI thực thi prompt cho nền tảng Blabla.\nContext: ${context ?? "General"}\nYêu cầu bắt buộc: trả lời ngắn gọn, rõ ý, đi thẳng vào kết quả; không lan man.\n\nPrompt người dùng:\n${prompt}`;
       const result = await runGemini({ apiKey, prompt: generatorPrompt });
       if (!result.ok) {
-        console.error("[AI generate] Gemini unavailable", result);
-        return NextResponse.json({
-          output: fallbackGenerate(prompt, context),
-          model: "local-fallback",
-          apiVersion: "none",
-          fallback: true,
-        });
+        console.error("[AI generate] Gemini unavailable", result.details);
+        return NextResponse.json({ error: "AI đang quá tải tạm thời. Vui lòng thử lại sau 1-2 phút." }, { status: 502 });
       }
 
-      return NextResponse.json({ output: normalizeFeedback(result.text, "Không có nội dung."), model: result.model, apiVersion: result.apiVersion, fallback: false });
+      return NextResponse.json({ output: normalizeFeedback(result.text, "Không có nội dung."), model: result.model, apiVersion: result.apiVersion });
     }
 
     const userPrompt = `Bạn là AI Judge cho nền tảng Blabla.\nContext: ${context ?? "General"}\nHãy chấm nghiêm khắc theo chất lượng thật sự:\n- Prompt mơ hồ/vô nghĩa/ngắn quá => điểm thấp (<30).\n- Prompt có cấu trúc, mục tiêu, ràng buộc rõ => điểm cao hơn.\nYêu cầu output: JSON duy nhất theo format {"score": number, "feedback": string}.\nFeedback tối đa 2 câu, ngắn gọn và cụ thể.\n\nPrompt người dùng:\n${prompt}`;
 
     const result = await runGemini({ apiKey, prompt: userPrompt, responseMimeType: "application/json" });
     if (!result.ok) {
-      console.error("[AI judge] Gemini unavailable", result);
-      const local = fallbackJudge(prompt);
-      return NextResponse.json({
-        score: local.score,
-        feedback: local.feedback,
-        model: "local-fallback",
-        apiVersion: "none",
-        fallback: true,
-      });
+      console.error("[AI judge] Gemini unavailable", result.details);
+      return NextResponse.json({ error: "AI đang quá tải tạm thời. Vui lòng thử lại sau 1-2 phút." }, { status: 502 });
     }
 
     const parsed = extractJsonObject(result.text);
@@ -216,7 +223,6 @@ export async function POST(request: NextRequest) {
         feedback: normalizeFeedback(String(parsed.feedback ?? ""), "Cần nêu rõ mục tiêu, đầu ra và ràng buộc."),
         model: result.model,
         apiVersion: result.apiVersion,
-        fallback: false,
       });
     }
 
@@ -225,7 +231,6 @@ export async function POST(request: NextRequest) {
       feedback: normalizeFeedback(result.text, "Cần viết prompt rõ mục tiêu, đầu ra và tiêu chí."),
       model: result.model,
       apiVersion: result.apiVersion,
-      fallback: false,
     });
   } catch {
     return NextResponse.json({ error: "Không thể xử lý yêu cầu AI." }, { status: 500 });
