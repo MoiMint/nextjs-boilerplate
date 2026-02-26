@@ -15,32 +15,24 @@ function normalizeModelName(name: string) {
 
 const DISABLED_MODEL_HINTS = ["tts", "image", "embedding", "vision"];
 
-const USER_REQUESTED_MODEL_FALLBACKS = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-2.5-flash-lite-preview-06-17",
+// Keep defaults focused on models that are commonly available for low-cost / free-tier usage.
+const FREE_TIER_MODEL_FALLBACKS = [
+  "gemini-2.0-flash-lite",
   "gemini-2.0-flash",
   "gemini-1.5-flash",
-  "gemma-3-27b-it",
-  "gemma-3-12b-it",
-  "gemma-3-4b-it",
-  "gemma-3-2b-it",
-  "gemma-3-1b-it",
 ];
 
 function resolveModelAliases(input: string) {
   const normalized = normalizeModelName(input);
 
   const aliasMap: Record<string, string[]> = {
-    "gemini-2.5-flash": ["gemini-2.5-flash"],
-    "gemini-2.5-flash-lite": ["gemini-2.5-flash-lite", "gemini-2.5-flash-lite-preview-06-17"],
+    "gemini-2.0-flash": ["gemini-2.0-flash"],
+    "gemini-2.0-flash-lite": ["gemini-2.0-flash-lite", "gemini-2.0-flash"],
+    "gemini-1.5-flash": ["gemini-1.5-flash"],
+    "gemini-2.5-flash": ["gemini-2.0-flash", "gemini-1.5-flash"],
+    "gemini-2.5-flash-lite": ["gemini-2.0-flash-lite", "gemini-2.0-flash"],
     "gemini-2.5-flash-tts": [],
-    "gemini-3-flash": ["gemini-2.5-flash", "gemini-2.0-flash"],
-    "gemma-3-27b": ["gemma-3-27b-it"],
-    "gemma-3-12b": ["gemma-3-12b-it"],
-    "gemma-3-4b": ["gemma-3-4b-it"],
-    "gemma-3-2b": ["gemma-3-2b-it"],
-    "gemma-3-1b": ["gemma-3-1b-it"],
+    "gemini-3-flash": ["gemini-2.0-flash", "gemini-1.5-flash"],
   };
 
   return aliasMap[normalized] ?? [normalized];
@@ -58,7 +50,7 @@ function parseEnvModels() {
 
   const expanded = raw.flatMap((model) => resolveModelAliases(model));
 
-  const combined = [...expanded, ...USER_REQUESTED_MODEL_FALLBACKS.map((model) => normalizeModelName(model))]
+  const combined = [...expanded, ...FREE_TIER_MODEL_FALLBACKS]
     .map((model) => normalizeModelName(model))
     .filter(Boolean)
     .filter(isRunnableTextModel);
@@ -90,7 +82,11 @@ async function callModel(args: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: args.prompt }] }],
-        generationConfig: args.responseMimeType ? { responseMimeType: args.responseMimeType } : undefined,
+        generationConfig: {
+          ...(args.responseMimeType ? { responseMimeType: args.responseMimeType } : {}),
+          maxOutputTokens: 512,
+          temperature: 0.5,
+        },
       }),
     },
   );
@@ -107,9 +103,7 @@ async function callModel(args: {
 
 async function runGemini(args: { apiKey: string; prompt: string; responseMimeType?: string }) {
   const envModels = parseEnvModels();
-  const modelCandidates = envModels.length
-    ? envModels.slice(0, 10)
-    : ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+  const modelCandidates = envModels.length ? envModels.slice(0, 4) : FREE_TIER_MODEL_FALLBACKS;
   const apiVersions: Array<"v1beta" | "v1"> = ["v1beta", "v1"];
   const errors: string[] = [];
 
@@ -133,7 +127,7 @@ async function runGemini(args: { apiKey: string; prompt: string; responseMimeTyp
         return {
           ok: false as const,
           error:
-            "Gemini quota đã hết (429). Cần bật billing/nạp quota cho API key hiện tại hoặc đổi sang API key khác còn hạn mức. Attempts: " +
+            "Quota free-tier đã hết (429). Hãy chờ reset quota, giảm tần suất gọi AI, hoặc đổi API key/project còn quota. Attempts: " +
             errors.join(" | "),
         };
       }
@@ -177,11 +171,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Thiếu prompt." }, { status: 400 });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY ?? "AIzaSyDTZ1cKv5def_8C7Z4RsdZGk0NjGS3WeYE";
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
         {
-          error: "Chưa cấu hình GEMINI_API_KEY trên server. Hãy thêm key vào biến môi trường để dùng AI thật.",
+          error: "Chưa cấu hình GEMINI_API_KEY trên server.",
         },
         { status: 500 },
       );
@@ -194,7 +188,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "Không gọi được model Gemini/Gemma khả dụng để tạo nội dung. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS hoặc model access của project. Chi tiết: " +
+              "Không gọi được model Gemini free-tier khả dụng để tạo nội dung. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS/quota. Chi tiết: " +
               result.error,
           },
           { status: 502 },
@@ -211,7 +205,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Không gọi được model Gemini/Gemma khả dụng. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS hoặc model access của project. Chi tiết: " +
+            "Không gọi được model Gemini free-tier khả dụng. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS/quota. Chi tiết: " +
             result.error,
         },
         { status: 502 },
