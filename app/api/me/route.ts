@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       unlockedLessonIds: user.unlockedLessonIds,
       ownedItemIds: user.ownedItemIds,
       farmPlot: user.farmPlot,
+      activeDashboardTheme: user.activeDashboardTheme,
     },
   });
 }

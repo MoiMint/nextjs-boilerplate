@@ -461,29 +461,22 @@ export default function WorkspacePage() {
   const activeTheme = me?.activeDashboardTheme ?? null;
 
   const themeClass = activeTheme === "pink"
-    ? "border-pink-300/80 bg-pink-700/45"
+    ? "border-pink-300/55 bg-pink-900/30"
     : activeTheme === "ocean"
-      ? "border-cyan-300/80 bg-cyan-700/45"
+      ? "border-cyan-300/55 bg-cyan-900/30"
       : activeTheme === "violet"
-        ? "border-violet-300/80 bg-violet-700/45"
+        ? "border-violet-300/55 bg-violet-900/30"
         : "border-white/10 bg-slate-900";
   const appThemeClass = activeTheme === "pink"
-    ? "from-pink-500/35 via-rose-500/25 to-slate-950"
+    ? "from-pink-500/16 via-rose-500/10 to-slate-950"
     : activeTheme === "ocean"
-      ? "from-cyan-500/35 via-blue-500/25 to-slate-950"
+      ? "from-cyan-500/16 via-blue-500/10 to-slate-950"
       : activeTheme === "violet"
-        ? "from-violet-500/35 via-fuchsia-500/25 to-slate-950"
+        ? "from-violet-500/16 via-fuchsia-500/10 to-slate-950"
         : "from-slate-900 via-slate-900 to-slate-950";
   const ownedGardenVisual = ownedGardenDecorations.map((item) => item.image).join(" ");
   const dashboardDecorVisual = ownedDashboardDecorations.map((item) => item.image).join(" ");
   const panelClass = `tab-panel rounded-2xl border p-5 ${themeClass} ${hasNeonFrame ? "neon-frame" : ""}`;
-  const themeTintClass = activeTheme === "pink"
-    ? "theme-tint-pink"
-    : activeTheme === "ocean"
-      ? "theme-tint-ocean"
-      : activeTheme === "violet"
-        ? "theme-tint-violet"
-        : "";
 
 
   const submitPromptMaster = async () => {
@@ -955,7 +948,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
   }, [config, selectedLessonId]);
 
   return (
-    <main className={`workspace-themed min-h-screen bg-gradient-to-br px-4 py-6 text-slate-100 md:px-8 md:py-8 ${appThemeClass} ${themeTintClass}`}>
+    <main className={`min-h-screen bg-gradient-to-br px-4 py-6 text-slate-100 md:px-8 md:py-8 ${appThemeClass}`}>
       <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[260px_1fr]">
         <aside className={`rounded-2xl border p-4 ${themeClass}`}>
           <h1 className="text-lg font-bold">{me?.name ?? "Loading..."}</h1>
