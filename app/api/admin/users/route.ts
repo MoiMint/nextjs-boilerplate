@@ -15,7 +15,17 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]?.createdAt;
 
     return {
-      ...user,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isAdmin: user.isAdmin,
+      createdAt: user.createdAt,
+      coin: user.coins,
+      loginCount: user.loginCount,
+      totalLoginDays: user.totalLoginDays,
+      loginStreak: user.loginStreak,
+      lastLoginDate: user.lastLoginDate,
       stats: {
         historyCount,
         postCount,

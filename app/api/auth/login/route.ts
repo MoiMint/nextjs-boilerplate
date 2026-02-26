@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSessionToken, isConsecutiveLogin, readDB, writeDB } from "@/app/lib/server-db";
+import { createSessionToken, isConsecutiveLogin, readDB, verifyPassword, writeDB } from "@/app/lib/server-db";
 
 export async function POST(request: NextRequest) {
   const { email, password } = (await request.json()) as { email?: string; password?: string };
@@ -10,7 +10,8 @@ export async function POST(request: NextRequest) {
 
   const db = await readDB();
   const user = db.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-  if (!user || user.password !== password) {
+  const isPasswordValid = user ? await verifyPassword(password, user.passwordHash) : false;
+  if (!user || !isPasswordValid) {
     return NextResponse.json({ error: "Thông tin đăng nhập không đúng." }, { status: 401 });
   }
 
