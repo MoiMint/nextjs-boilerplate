@@ -22,7 +22,8 @@
         "readyAt": null,
         "lastHarvestAt": null
       },
-      "activeDashboardTheme": null
+      "activeDashboardTheme": null,
+      "activeNameStyle": null
     }
   ],
   "sessions": [],
@@ -291,6 +292,36 @@
         "price": 260,
         "effect": "Trang trí khu vườn",
         "category": "garden-decoration",
+        "themeKey": null
+      },
+      {
+        "id": "item-name-rainbow",
+        "name": "Tên cầu vồng",
+        "image": "🌈",
+        "price": 300,
+        "effect": "Màu tên gradient đổi liên tục",
+        "category": "name-style",
+        "nameStyleKey": "rainbow",
+        "themeKey": null
+      },
+      {
+        "id": "item-name-fire",
+        "name": "Tên lửa",
+        "image": "🔥",
+        "price": 280,
+        "effect": "Màu tên đỏ-cam nổi bật",
+        "category": "name-style",
+        "nameStyleKey": "fire",
+        "themeKey": null
+      },
+      {
+        "id": "item-name-ocean",
+        "name": "Tên đại dương",
+        "image": "🌊",
+        "price": 280,
+        "effect": "Màu tên xanh chuyển động",
+        "category": "name-style",
+        "nameStyleKey": "ocean",
         "themeKey": null
       }
     ],

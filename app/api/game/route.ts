@@ -27,11 +27,13 @@ export async function POST(request: NextRequest) {
       | "water_plot"
       | "harvest_plot"
       | "abandon_plot"
-      | "set_dashboard_theme";
+      | "set_dashboard_theme"
+      | "set_name_style";
     lessonId?: string;
     itemId?: string;
     seedType?: string;
     themeKey?: string;
+    nameStyleKey?: string;
   };
 
   const db = await readDB();
@@ -66,8 +68,11 @@ export async function POST(request: NextRequest) {
     if (item.category === "dashboard-theme" && item.themeKey) {
       user.activeDashboardTheme = item.themeKey;
     }
+    if (item.category === "name-style" && item.nameStyleKey) {
+      user.activeNameStyle = item.nameStyleKey;
+    }
     await writeDB(db);
-    return NextResponse.json({ ok: true, coins: user.coins, ownedItemIds: user.ownedItemIds, activeDashboardTheme: user.activeDashboardTheme });
+    return NextResponse.json({ ok: true, coins: user.coins, ownedItemIds: user.ownedItemIds, activeDashboardTheme: user.activeDashboardTheme, activeNameStyle: user.activeNameStyle });
   }
 
   if (body.action === "sell_item") {
@@ -89,8 +94,18 @@ export async function POST(request: NextRequest) {
       user.activeDashboardTheme = fallbackTheme?.themeKey ?? null;
     }
 
+    if (item.category === "name-style" && item.nameStyleKey && user.activeNameStyle === item.nameStyleKey) {
+      const fallbackNameStyle = db.config.shopItems.find(
+        (shopItem) =>
+          shopItem.category === "name-style" &&
+          shopItem.nameStyleKey &&
+          user.ownedItemIds.includes(shopItem.id),
+      );
+      user.activeNameStyle = fallbackNameStyle?.nameStyleKey ?? null;
+    }
+
     await writeDB(db);
-    return NextResponse.json({ ok: true, coins: user.coins, refund, ownedItemIds: user.ownedItemIds, activeDashboardTheme: user.activeDashboardTheme });
+    return NextResponse.json({ ok: true, coins: user.coins, refund, ownedItemIds: user.ownedItemIds, activeDashboardTheme: user.activeDashboardTheme, activeNameStyle: user.activeNameStyle });
   }
 
   if (body.action === "set_dashboard_theme") {
@@ -103,6 +118,18 @@ export async function POST(request: NextRequest) {
     user.activeDashboardTheme = themeKey;
     await writeDB(db);
     return NextResponse.json({ ok: true, activeDashboardTheme: user.activeDashboardTheme });
+  }
+
+  if (body.action === "set_name_style") {
+    const nameStyleKey = body.nameStyleKey?.trim();
+    if (!nameStyleKey) return NextResponse.json({ error: "Thiếu nameStyleKey." }, { status: 400 });
+    const ownedStyle = db.config.shopItems.find(
+      (item) => item.category === "name-style" && item.nameStyleKey === nameStyleKey && user.ownedItemIds.includes(item.id),
+    );
+    if (!ownedStyle) return NextResponse.json({ error: "Bạn chưa sở hữu style tên này." }, { status: 400 });
+    user.activeNameStyle = nameStyleKey;
+    await writeDB(db);
+    return NextResponse.json({ ok: true, activeNameStyle: user.activeNameStyle });
   }
 
   if (body.action === "plant_seed") {

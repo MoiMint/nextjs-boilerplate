@@ -82,7 +82,17 @@ function checkMessageRateLimit(userId: string, dbPosts: Array<{ userId: string; 
 
 export async function GET() {
   const db = await readDB();
-  const posts = db.posts.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 80);
+  const posts = db.posts
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .slice(0, 80)
+    .map((post) => {
+      const owner = db.users.find((user) => user.id === post.userId);
+      return {
+        ...post,
+        userRole: owner?.role ?? (post.type === "system" ? "system" : "member"),
+        activeNameStyle: owner?.activeNameStyle ?? null,
+      };
+    });
   return NextResponse.json({ posts });
 }
 

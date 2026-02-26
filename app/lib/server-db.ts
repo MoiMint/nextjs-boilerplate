@@ -23,8 +23,9 @@ type ShopItem = {
   image: string;
   price: number;
   effect: string;
-  category?: "dashboard-theme" | "dashboard-decoration" | "garden-decoration";
+  category?: "dashboard-theme" | "dashboard-decoration" | "garden-decoration" | "name-style";
   themeKey?: string | null;
+  nameStyleKey?: string | null;
 };
 
 type CourseSubmission = {
@@ -83,6 +84,7 @@ export type DBUser = {
     lastHarvestAt: string | null;
   };
   activeDashboardTheme?: string | null;
+  activeNameStyle?: string | null;
 };
 
 export type DBSession = {
@@ -301,6 +303,9 @@ const defaultConfig: DBConfig = {
     { id: "item-theme-pink", name: "Sơn hồng dashboard", image: "🎨", price: 180, effect: "Đổi dashboard sang chủ đề hồng", category: "dashboard-theme", themeKey: "pink" },
     { id: "item-theme-ocean", name: "Sơn đại dương", image: "🌊", price: 220, effect: "Đổi dashboard sang chủ đề đại dương", category: "dashboard-theme", themeKey: "ocean" },
     { id: "item-theme-violet", name: "Sơn tím galaxy", image: "🪐", price: 260, effect: "Đổi dashboard sang chủ đề tím", category: "dashboard-theme", themeKey: "violet" },
+    { id: "item-name-rainbow", name: "Tên cầu vồng", image: "🌈", price: 300, effect: "Màu tên gradient đổi liên tục", category: "name-style", nameStyleKey: "rainbow" },
+    { id: "item-name-fire", name: "Tên lửa", image: "🔥", price: 280, effect: "Màu tên đỏ-cam nổi bật", category: "name-style", nameStyleKey: "fire" },
+    { id: "item-name-ocean", name: "Tên đại dương", image: "🌊", price: 280, effect: "Màu tên xanh chuyển động", category: "name-style", nameStyleKey: "ocean" },
     { id: "item-neon-frame", name: "Viền neon", image: "💠", price: 140, effect: "Trang trí dashboard", category: "dashboard-decoration", themeKey: null },
     { id: "item-sakura-wall", name: "Tường hoa sakura", image: "🌸", price: 210, effect: "Trang trí dashboard", category: "dashboard-decoration", themeKey: null },
     { id: "item-garden-lamp", name: "Đèn lối đi vườn", image: "🏮", price: 160, effect: "Trang trí khu vườn", category: "garden-decoration", themeKey: null },
@@ -409,6 +414,7 @@ const adminSeed: DBUser = {
     lastHarvestAt: null,
   },
   activeDashboardTheme: null,
+  activeNameStyle: null,
 };
 
 const defaultDB = (): DBShape => ({
@@ -449,6 +455,7 @@ function ensureUserStats(user: Partial<DBUser>): DBUser {
       lastHarvestAt: null,
     },
     activeDashboardTheme: user.activeDashboardTheme ?? null,
+    activeNameStyle: user.activeNameStyle ?? null,
   };
 }
 

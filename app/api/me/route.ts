@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
       ownedItemIds: user.ownedItemIds,
       farmPlot: user.farmPlot,
       activeDashboardTheme: user.activeDashboardTheme,
+      activeNameStyle: user.activeNameStyle,
     },
   });
 }
