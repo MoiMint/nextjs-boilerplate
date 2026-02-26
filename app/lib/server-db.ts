@@ -123,6 +123,23 @@ export type DBPost = {
   };
 };
 
+export type DBUserWeeklyGoal = {
+  id: string;
+  userId: string;
+  startsAt: string;
+  deadline: string;
+  targetMaster: number;
+  targetArena: number;
+  targetAuditor: number;
+  progressMaster: number;
+  progressArena: number;
+  progressAuditor: number;
+  completedAt: string | null;
+  rewardClaimedAt: string | null;
+  rewardCoins: number;
+  updatedAt: string;
+};
+
 export type DBFeedback = {
   id: string;
   userId: string;
@@ -160,6 +177,7 @@ export type DBShape = {
   posts: DBPost[];
   feedbacks: DBFeedback[];
   arenaSubmissions: DBArenaSubmission[];
+  userWeeklyGoals: DBUserWeeklyGoal[];
   config: DBConfig;
 };
 
@@ -427,6 +445,7 @@ const defaultDB = (): DBShape => ({
   posts: [],
   feedbacks: [],
   arenaSubmissions: [],
+  userWeeklyGoals: [],
   config: defaultConfig,
 });
 
@@ -607,6 +626,21 @@ function ensureAdmin(db: DBShape): DBShape {
     };
   });
   db.arenaSubmissions = db.arenaSubmissions ?? [];
+  db.userWeeklyGoals = (db.userWeeklyGoals ?? []).map((goal) => ({
+    ...goal,
+    startsAt: goal.startsAt ?? new Date(Date.now() - 1000 * 60 * 60 * 24 * 6).toISOString(),
+    deadline: goal.deadline ?? new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
+    targetMaster: Math.max(0, Math.floor(goal.targetMaster ?? 0)),
+    targetArena: Math.max(0, Math.floor(goal.targetArena ?? 0)),
+    targetAuditor: Math.max(0, Math.floor(goal.targetAuditor ?? 0)),
+    progressMaster: Math.max(0, Math.floor(goal.progressMaster ?? 0)),
+    progressArena: Math.max(0, Math.floor(goal.progressArena ?? 0)),
+    progressAuditor: Math.max(0, Math.floor(goal.progressAuditor ?? 0)),
+    completedAt: goal.completedAt ?? null,
+    rewardClaimedAt: goal.rewardClaimedAt ?? null,
+    rewardCoins: Math.max(0, Math.floor(goal.rewardCoins ?? 120)),
+    updatedAt: goal.updatedAt ?? new Date().toISOString(),
+  }));
   db.posts = (db.posts ?? []).map((post) => ({
     ...post,
     type: post.type ?? "message",

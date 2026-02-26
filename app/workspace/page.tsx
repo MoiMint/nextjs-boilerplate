@@ -11,7 +11,7 @@ import { DashboardTab } from "./components/DashboardTab";
 import { GardenTab } from "./components/GardenTab";
 import { PromptMasterTab } from "./components/PromptMasterTab";
 import { useGameActions } from "./hooks/useGameActions";
-import type { AppConfig, AuditorScenario, FeedbackItem, HistoryItem, Post, PromptMasterLesson, SeedSpec, User } from "./types";
+import type { AppConfig, AuditorScenario, FeedbackItem, HistoryItem, Post, PromptMasterLesson, SeedSpec, User, WeeklyGoal } from "./types";
 import { formatChatTime } from "./utils/format";
 import { I18N, TAB_LABELS, type Locale, type Tab } from "./utils/i18n";
 import { getActiveTabClass, getNameStyleClass, getThemeClasses } from "./utils/theme";
@@ -36,6 +36,9 @@ export default function WorkspacePage() {
   const [histories, setHistories] = useState<HistoryItem[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
+  const [goalDraft, setGoalDraft] = useState({ targetMaster: 2, targetArena: 1, targetAuditor: 1, rewardCoins: 120, deadline: "" });
+  const [goalMsg, setGoalMsg] = useState("");
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -164,6 +167,13 @@ export default function WorkspacePage() {
     setHistories(data.histories);
   }, [token]);
 
+  const loadWeeklyGoal = useCallback(async () => {
+    const res = await fetch("/api/goals", { headers: { "x-session-token": token ?? "" } });
+    if (!res.ok) return;
+    const data = (await res.json()) as { goal: WeeklyGoal | null };
+    setWeeklyGoal(data.goal);
+  }, [token]);
+
   const loadPosts = useCallback(async () => {
     const res = await fetch("/api/posts");
     const data = (await res.json()) as { posts: Post[] };
@@ -218,7 +228,8 @@ export default function WorkspacePage() {
     loadPosts();
     loadConfig();
     loadLeaderboard();
-  }, [router, token, loadMe, loadHistories, loadPosts, loadConfig, loadLeaderboard]);
+    loadWeeklyGoal();
+  }, [router, token, loadMe, loadHistories, loadPosts, loadConfig, loadLeaderboard, loadWeeklyGoal]);
 
   useEffect(() => {
     if (me?.isAdmin) {
@@ -308,6 +319,23 @@ export default function WorkspacePage() {
     window.localStorage.setItem("blabla-locale", locale);
   }, [locale]);
 
+  useEffect(() => {
+    if (weeklyGoal) {
+      setGoalDraft({
+        targetMaster: weeklyGoal.targetMaster,
+        targetArena: weeklyGoal.targetArena,
+        targetAuditor: weeklyGoal.targetAuditor,
+        rewardCoins: weeklyGoal.rewardCoins,
+        deadline: weeklyGoal.deadline.slice(0, 10),
+      });
+      return;
+    }
+
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    setGoalDraft((prev) => ({ ...prev, deadline: nextWeek.toISOString().slice(0, 10) }));
+  }, [weeklyGoal]);
+
   const text = I18N[locale];
 
   const avgScore = histories.length
@@ -319,6 +347,43 @@ export default function WorkspacePage() {
   ).size;
   const arenaAttempts = histories.filter((item) => item.type === "arena").length;
   const auditorAttempts = histories.filter((item) => item.type === "auditor").length;
+  const weeklyGoalTotal = (weeklyGoal?.targetMaster ?? 0) + (weeklyGoal?.targetArena ?? 0) + (weeklyGoal?.targetAuditor ?? 0);
+  const weeklyGoalProgress = (weeklyGoal?.progressMaster ?? 0) + (weeklyGoal?.progressArena ?? 0) + (weeklyGoal?.progressAuditor ?? 0);
+  const weeklyGoalPercent = weeklyGoalTotal > 0 ? Math.min(100, Math.round((weeklyGoalProgress / weeklyGoalTotal) * 100)) : 0;
+
+  const recommendation = useMemo(() => {
+    const recentByType = (type: "master" | "arena" | "auditor") => histories.filter((item) => item.type === type).slice(0, 3);
+    const buckets = (["master", "arena", "auditor"] as const).map((type) => {
+      const items = recentByType(type);
+      const avg = items.length ? items.reduce((sum, item) => sum + item.score, 0) / items.length : 0;
+      return { type, avg, attempts: items.length };
+    });
+
+    const practiced = buckets.filter((item) => item.attempts > 0);
+    const weakest = (practiced.length ? practiced : buckets).sort((a, b) => a.avg - b.avg)[0];
+
+    if (weakest.type === "master") {
+      const nextLesson = config?.promptMasterLessons.find((lesson) => !me?.unlockedLessonIds?.includes(lesson.id))
+        ?? config?.promptMasterLessons[0];
+      return {
+        title: "Recommended next lesson: PromptMaster",
+        detail: nextLesson ? `${nextLesson.title} (${nextLesson.topic})` : "Ôn lại bài PromptMaster gần nhất",
+      };
+    }
+
+    if (weakest.type === "arena") {
+      return {
+        title: "Recommended next challenge: Arena",
+        detail: config ? `${config.arenaWeekly.weekLabel} - ${config.arenaWeekly.title}` : "Làm thêm 1 đề Arena để cải thiện tốc độ",
+      };
+    }
+
+    const auditorTarget = activeAuditorScenario ?? config?.auditorScenarios?.[0] ?? config?.auditorScenario;
+    return {
+      title: "Recommended next challenge: AI Auditor",
+      detail: auditorTarget ? auditorTarget.title : "Luyện phát hiện lỗi AI với case mới",
+    };
+  }, [activeAuditorScenario, config, histories, me?.unlockedLessonIds]);
   const communityPosts = posts.length;
   const topArena = leaderboard[0];
   const myArenaRank = me ? leaderboard.findIndex((entry) => entry.userName === me.name) + 1 : 0;
@@ -413,6 +478,7 @@ Nhiệm vụ: tự kiểm tra output AI và phản hồi reviewer đã bám yêu
     });
 
     await loadHistories();
+    await loadWeeklyGoal();
     await loadMe();
     setMasterResult(`AI tạo output: ${generatedOutput}\n\nReviewer: ${reviewerFeedback}\n\nĐiểm cuối: ${score}% | Tổng kết: ${finalFeedback}\n\n+40 Endless Coin`);
     setMasterLoading(false);
@@ -475,6 +541,7 @@ Accuracy: ${data.accuracy}% | Tokens: ${data.tokens} | Efficiency: ${data.effici
     );
     await loadLeaderboard();
     await loadHistories();
+    await loadWeeklyGoal();
     await loadMe();
     setArenaResult((prev) => `${prev}\n\n+35 Endless Coin`);
     setArenaLoading(false);
@@ -539,9 +606,28 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     });
 
     await loadHistories();
+    await loadWeeklyGoal();
     await loadMe();
     setAuditorResult(`AI trả lời sau khi sửa: ${correctedAnswer}\n\nĐiểm: ${score}% | Nhận xét: ${feedback}\n\n+30 Endless Coin`);
     setAuditorLoading(false);
+  };
+
+  const saveWeeklyGoal = async () => {
+    setGoalMsg("");
+    const res = await fetch("/api/goals", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify(goalDraft),
+    });
+    const data = (await res.json()) as { error?: string; rewarded?: number; goal?: WeeklyGoal | null };
+    if (!res.ok) {
+      setGoalMsg(data.error ?? "Không lưu được mục tiêu tuần.");
+      return;
+    }
+
+    setWeeklyGoal(data.goal ?? null);
+    setGoalMsg(data.rewarded ? `Mục tiêu hoàn tất! +${data.rewarded} coin thưởng tuần.` : "Đã cập nhật mục tiêu tuần.");
+    await loadMe();
   };
 
   const postCommunity = async () => {
@@ -917,6 +1003,37 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
               {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
               <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
+
+              <div className="mt-4 rounded-xl border border-violet-300/30 bg-violet-500/10 p-4">
+                <p className="text-xs uppercase tracking-wide text-violet-200">Card đầu: gợi ý học tiếp</p>
+                <p className="mt-1 text-lg font-semibold text-violet-100">{recommendation.title}</p>
+                <p className="mt-1 text-sm text-slate-200">{recommendation.detail}</p>
+                <p className="mt-2 text-xs text-violet-200">Dựa trên điểm thấp nhất trong 3 lần gần nhất theo từng loại bài.</p>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-500/10 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-amber-200">Weekly Goals</p>
+                    <p className="text-xs text-slate-300">Hoàn thành mục tiêu tuần để nhận thêm {goalDraft.rewardCoins} coin.</p>
+                  </div>
+                  <p className="text-xs text-amber-100">{weeklyGoal?.deadline ? `Deadline: ${weeklyGoal.deadline.slice(0, 10)}` : "Chưa đặt"}</p>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-900/70">
+                  <div className="h-full rounded-full bg-amber-300 transition-all" style={{ width: `${weeklyGoalPercent}%` }} />
+                </div>
+                <p className="mt-2 text-xs text-amber-100">Tiến độ: {weeklyGoalProgress}/{weeklyGoalTotal} ({weeklyGoalPercent}%) • Master {weeklyGoal?.progressMaster ?? 0}/{goalDraft.targetMaster} • Arena {weeklyGoal?.progressArena ?? 0}/{goalDraft.targetArena} • Auditor {weeklyGoal?.progressAuditor ?? 0}/{goalDraft.targetAuditor}</p>
+                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
+                  <label className="space-y-1"><span>Master</span><input type="number" min={0} value={goalDraft.targetMaster} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetMaster: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                  <label className="space-y-1"><span>Arena</span><input type="number" min={0} value={goalDraft.targetArena} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetArena: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                  <label className="space-y-1"><span>Auditor</span><input type="number" min={0} value={goalDraft.targetAuditor} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetAuditor: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                  <label className="space-y-1"><span>Coin thưởng</span><input type="number" min={0} value={goalDraft.rewardCoins} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, rewardCoins: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                  <label className="space-y-1"><span>Deadline</span><input type="date" value={goalDraft.deadline} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, deadline: e.target.value }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                </div>
+                <button onClick={() => void saveWeeklyGoal()} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-100">Lưu mục tiêu tuần</button>
+                {goalMsg ? <p className="mt-2 text-xs text-amber-100">{goalMsg}</p> : null}
+              </div>
+
               <div className="mt-3 rounded-lg border border-cyan-300/20 bg-slate-900/60 p-3 text-xs text-cyan-100">
                 <p className="font-semibold">{text.contactTitle}</p>
                 <p className="mt-1">{text.contactPhone}</p>
