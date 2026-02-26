@@ -17,6 +17,7 @@ import { I18N, TAB_LABELS, type Locale, type Tab } from "./utils/i18n";
 import { getActiveTabClass, getNameStyleClass, getThemeClasses } from "./utils/theme";
 
 const SESSION_TOKEN_KEY = "blabla-session-token";
+const COMMUNITY_POLL_INTERVAL_MS = 2500;
 const SEED_OPTIONS: SeedSpec[] = [
   { id: "seed-basic", name: "Hạt cải", price: 50, reward: 150, growHours: 8 },
   { id: "seed-sun", name: "Hạt hướng dương", price: 120, reward: 380, growHours: 12 },
@@ -65,6 +66,7 @@ export default function WorkspacePage() {
   const [giftCoinAmount, setGiftCoinAmount] = useState(100);
   const [giftReceiverLimit, setGiftReceiverLimit] = useState(5);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  const communityStickToBottomRef = useRef(true);
 
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
@@ -237,9 +239,27 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (activeTab !== "community") return;
     const el = chatContainerRef.current;
-    if (!el) return;
+    if (!el || !communityStickToBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
   }, [activeTab, posts]);
+
+  useEffect(() => {
+    if (activeTab !== "community" || typeof document === "undefined") return;
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadPosts();
+    };
+
+    const timer = setInterval(refreshWhenVisible, COMMUNITY_POLL_INTERVAL_MS);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    refreshWhenVisible();
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [activeTab, loadPosts]);
 
   useEffect(() => {
     if (activeTab !== "garden") return;
@@ -583,6 +603,31 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     }
     await loadMe();
     await refreshCommunity();
+  };
+
+  const clearCommunityPosts = async () => {
+    if (!me?.isAdmin || communitySending) return;
+    const confirmed = window.confirm("Xóa toàn bộ lịch sử chat cộng đồng?");
+    if (!confirmed) return;
+
+    setCommunitySending(true);
+    setCommunityError("");
+
+    const res = await fetch("/api/posts", {
+      method: "DELETE",
+      headers: authHeaders,
+    });
+    const data = (await res.json()) as { error?: string };
+
+    if (!res.ok) {
+      setCommunityError(data.error ?? "Không thể xóa lịch sử chat.");
+      setCommunitySending(false);
+      return;
+    }
+
+    communityStickToBottomRef.current = true;
+    await refreshCommunity();
+    setCommunitySending(false);
   };
 
   const createAdmin = async () => {
@@ -1241,6 +1286,15 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 >
                   Làm mới ngay
                 </button>
+                {me?.isAdmin ? (
+                  <button
+                    onClick={clearCommunityPosts}
+                    disabled={communitySending}
+                    className="rounded-lg border border-rose-300/40 px-3 py-2 text-xs text-rose-200 disabled:opacity-50"
+                  >
+                    Xóa lịch sử chat
+                  </button>
+                ) : null}
               </div>
               <p className="mt-1 text-xs text-slate-400">Hiển thị tin nhắn cộng đồng theo danh sách hiện tại. Bấm &quot;Làm mới ngay&quot; để cập nhật.</p>
               <div className="mt-3 grid gap-2 rounded-xl border border-amber-300/20 bg-amber-500/10 p-3 md:grid-cols-3">
@@ -1251,6 +1305,11 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
 
               <div
                 ref={chatContainerRef}
+                onScroll={(e) => {
+                  const target = e.currentTarget;
+                  const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+                  communityStickToBottomRef.current = distanceToBottom < 80;
+                }}
                 className="mt-3 max-h-[42vh] space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/70 p-3"
               >
                 {posts

@@ -200,3 +200,16 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
+
+export async function DELETE(request: NextRequest) {
+  const token = request.headers.get("x-session-token");
+  const user = await getUserFromToken(token);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user.isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const db = await readDB();
+  db.posts = [];
+  await writeDB(db);
+
+  return NextResponse.json({ ok: true });
+}
