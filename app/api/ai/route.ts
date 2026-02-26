@@ -71,6 +71,11 @@ function compactErrorText(raw: string) {
   return text.length <= 180 ? text : `${text.slice(0, 180)}...`;
 }
 
+function isQuotaExceededError(raw: string) {
+  const normalized = raw.toLowerCase();
+  return normalized.includes("quota") || normalized.includes("billing") || normalized.includes("exceeded your current quota");
+}
+
 async function callModel(args: {
   apiKey: string;
   apiVersion: "v1beta" | "v1";
@@ -124,10 +129,12 @@ async function runGemini(args: { apiKey: string; prompt: string; responseMimeTyp
 
       errors.push(`${apiVersion}/${model} [${result.status}] ${compactErrorText(result.errorText)}`);
 
-      if (result.status === 429) {
+      if (result.status === 429 && isQuotaExceededError(result.errorText)) {
         return {
           ok: false as const,
-          error: `Gemini rate limit (429). Stop retry to avoid spam requests. Attempts: ${errors.join(" | ")}`,
+          error:
+            "Gemini quota đã hết (429). Cần bật billing/nạp quota cho API key hiện tại hoặc đổi sang API key khác còn hạn mức. Attempts: " +
+            errors.join(" | "),
         };
       }
     }
