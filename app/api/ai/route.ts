@@ -6,17 +6,69 @@ type GeminiGenerateResponse = {
 };
 
 function normalizeModelName(name: string) {
-  return name.startsWith("models/") ? name.replace("models/", "") : name;
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/^models\//, "")
+    .replace(/\s+/g, "-");
 }
 
 const DISABLED_MODEL_HINTS = ["tts", "image", "embedding", "vision"];
 
+const USER_REQUESTED_MODEL_FALLBACKS = [
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-flash-lite-preview-06-17",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemma-3-27b-it",
+  "gemma-3-12b-it",
+  "gemma-3-4b-it",
+  "gemma-3-2b-it",
+  "gemma-3-1b-it",
+];
+
+function resolveModelAliases(input: string) {
+  const normalized = normalizeModelName(input);
+
+  const aliasMap: Record<string, string[]> = {
+    "gemini-2.5-flash": ["gemini-2.5-flash"],
+    "gemini-2.5-flash-lite": ["gemini-2.5-flash-lite", "gemini-2.5-flash-lite-preview-06-17"],
+    "gemini-2.5-flash-tts": [],
+    "gemini-3-flash": ["gemini-2.5-flash", "gemini-2.0-flash"],
+    "gemma-3-27b": ["gemma-3-27b-it"],
+    "gemma-3-12b": ["gemma-3-12b-it"],
+    "gemma-3-4b": ["gemma-3-4b-it"],
+    "gemma-3-2b": ["gemma-3-2b-it"],
+    "gemma-3-1b": ["gemma-3-1b-it"],
+  };
+
+  return aliasMap[normalized] ?? [normalized];
+}
+
+function isRunnableTextModel(model: string) {
+  return !DISABLED_MODEL_HINTS.some((hint) => model.includes(hint));
+}
+
 function parseEnvModels() {
-  return (process.env.GEMINI_MODELS ?? "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash")
+  const raw = (process.env.GEMINI_MODELS ?? "")
     .split(",")
-    .map((m) => normalizeModelName(m.trim()))
+    .map((m) => m.trim())
+    .filter(Boolean);
+
+  const expanded = raw.flatMap((model) => resolveModelAliases(model));
+
+  const combined = [...expanded, ...USER_REQUESTED_MODEL_FALLBACKS.map((model) => normalizeModelName(model))]
+    .map((model) => normalizeModelName(model))
     .filter(Boolean)
-    .filter((m) => !DISABLED_MODEL_HINTS.some((hint) => m.toLowerCase().includes(hint)));
+    .filter(isRunnableTextModel);
+
+  return combined.filter((model, index) => combined.indexOf(model) === index);
+}
+
+function compactErrorText(raw: string) {
+  const text = raw.replace(/\s+/g, " ").trim();
+  return text.length <= 180 ? text : `${text.slice(0, 180)}...`;
 }
 
 async function callModel(args: {
@@ -50,7 +102,9 @@ async function callModel(args: {
 
 async function runGemini(args: { apiKey: string; prompt: string; responseMimeType?: string }) {
   const envModels = parseEnvModels();
-  const modelCandidates = envModels.length ? envModels.slice(0, 4) : ["gemini-2.5-flash", "gemini-2.0-flash"];
+  const modelCandidates = envModels.length
+    ? envModels.slice(0, 10)
+    : ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
   const apiVersions: Array<"v1beta" | "v1"> = ["v1beta", "v1"];
   const errors: string[] = [];
 
@@ -68,19 +122,12 @@ async function runGemini(args: { apiKey: string; prompt: string; responseMimeTyp
         return { ok: true as const, text: result.text, model, apiVersion };
       }
 
-      errors.push(`${apiVersion}/${model} [${result.status}]`);
-
-      // Keep trying the other API version/model even when one call returns
-      // 400/404 because model availability and request validation can differ
-      // between v1beta and v1.
-      if (result.status === 400 || result.status === 404) {
-        continue;
-      }
+      errors.push(`${apiVersion}/${model} [${result.status}] ${compactErrorText(result.errorText)}`);
 
       if (result.status === 429) {
         return {
           ok: false as const,
-          error: `Gemini rate limit (429). Stop retry to avoid spam requests. Attempts: ${errors.join(", ")}`,
+          error: `Gemini rate limit (429). Stop retry to avoid spam requests. Attempts: ${errors.join(" | ")}`,
         };
       }
     }
@@ -140,7 +187,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "Không gọi được model Gemini khả dụng để tạo nội dung. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS hoặc model access của project. Chi tiết: " +
+              "Không gọi được model Gemini/Gemma khả dụng để tạo nội dung. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS hoặc model access của project. Chi tiết: " +
               result.error,
           },
           { status: 502 },
@@ -157,28 +204,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Không gọi được model Gemini khả dụng. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS hoặc model access của project. Chi tiết: " +
+            "Không gọi được model Gemini/Gemma khả dụng. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS hoặc model access của project. Chi tiết: " +
             result.error,
         },
         { status: 502 },
       );
     }
 
-    try {
-      const parsed = parseJudgeResult(result.text);
-      if (!parsed) {
-        return NextResponse.json({ score: 70, feedback: result.text, model: result.model, apiVersion: result.apiVersion });
-      }
-
-      return NextResponse.json({
-        score: parsed.score ?? 70,
-        feedback: parsed.feedback ?? "Không có feedback.",
-        model: result.model,
-        apiVersion: result.apiVersion,
-      });
-    } catch {
+    const parsed = parseJudgeResult(result.text);
+    if (!parsed) {
       return NextResponse.json({ score: 70, feedback: result.text, model: result.model, apiVersion: result.apiVersion });
     }
+
+    return NextResponse.json({
+      score: parsed.score ?? 70,
+      feedback: parsed.feedback ?? "Không có feedback.",
+      model: result.model,
+      apiVersion: result.apiVersion,
+    });
   } catch {
     return NextResponse.json({ error: "Không thể xử lý yêu cầu AI." }, { status: 500 });
   }
