@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 const pillars = [
@@ -26,6 +30,23 @@ const audiences = [
 ];
 
 export default function Home() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const token = localStorage.getItem("blabla-session-token");
+    if (!token) return;
+
+    void (async () => {
+      const response = await fetch("/api/me", {
+        headers: { "x-session-token": token },
+      });
+
+      if (response.ok) {
+        router.replace("/workspace");
+      }
+    })();
+  }, [router]);
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
       <section className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-16 md:px-10">

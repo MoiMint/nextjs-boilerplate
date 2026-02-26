@@ -50,8 +50,16 @@ export async function POST(request: NextRequest) {
   };
   db.users.push(user);
 
-  const token = createSessionToken(user.id);
-  db.sessions.push({ token, userId: user.id, createdAt: now });
+  const sessionId = newId("sess");
+  const token = createSessionToken(user.id, sessionId);
+  db.sessions.push({
+    id: sessionId,
+    token,
+    userId: user.id,
+    createdAt: now,
+    expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
+    revokedAt: null,
+  });
   await writeDB(db);
 
   return NextResponse.json({

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const SESSION_TOKEN_KEY = "blabla-session-token";
@@ -12,6 +12,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem(SESSION_TOKEN_KEY);
+    if (!token) return;
+
+    void (async () => {
+      const response = await fetch("/api/me", {
+        headers: { "x-session-token": token },
+      });
+
+      if (response.ok) {
+        router.replace("/workspace");
+      }
+    })();
+  }, [router]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
