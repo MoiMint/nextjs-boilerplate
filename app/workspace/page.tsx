@@ -3,226 +3,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-
-type User = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  isAdmin: boolean;
-  createdAt?: string;
-  loginCount?: number;
-  totalLoginDays?: number;
-  loginStreak?: number;
-  lastLoginDate?: string | null;
-  stats?: { historyCount: number; postCount: number; lastSessionAt: string | null };
-  coins?: number;
-  unlockedLessonIds?: string[];
-  ownedItemIds?: string[];
-  farmPlot?: {
-    seedType: string | null;
-    plantedAt: string | null;
-    wateredAt: string | null;
-    readyAt: string | null;
-    lastHarvestAt: string | null;
-  };
-  activeDashboardTheme?: string | null;
-  activeNameStyle?: string | null;
-};
-
-type HistoryItem = { id: string; type?: "master" | "arena" | "auditor"; title: string; score: number; feedback: string; createdAt: string };
-type Post = {
-  id: string;
-  userName: string;
-  content: string;
-  createdAt: string;
-  userRole?: string;
-  activeNameStyle?: string | null;
-  type?: "message" | "coin-gift" | "system";
-  gift?: {
-    totalCoins: number;
-    maxReceivers: number;
-    perReceiver: number;
-    claimedUserIds: string[];
-    creatorUserName: string;
-  };
-};
-
-type FeedbackItem = {
-  id: string;
-  userId: string;
-  userName: string;
-  message: string;
-  createdAt: string;
-};
-type Tab = "dashboard" | "promptmaster" | "arena" | "auditor" | "history" | "community" | "garden" | "admin";
-type PromptMasterLesson = {
-  id: string;
-  title: string;
-  topic: string;
-  situation: string;
-  overview: string;
-  methodGuide: string;
-  practiceChallenge: string;
-  samplePrompt: string;
-  price?: number;
-  approved?: boolean;
-  pendingApproval?: boolean;
-  createdByUserId?: string;
-};
-
-type ShopItem = {
-  id: string;
-  name: string;
-  image: string;
-  price: number;
-  effect: string;
-  category?: "dashboard-theme" | "dashboard-decoration" | "garden-decoration" | "name-style";
-  themeKey?: string | null;
-  nameStyleKey?: string | null;
-};
-type CourseSubmission = {
-  id: string;
-  title: string;
-  topic: string;
-  creatorName: string;
-  status: "pending";
-};
-
-type SeedSpec = { id: string; name: string; price: number; reward: number; growHours: number };
-
-type ArenaWeekly = {
-  weekLabel: string;
-  title: string;
-  inputText: string;
-  goldenResponse: string;
-};
-
-type AuditorScenario = {
-  title: string;
-  wrongAnswer: string;
-  requiredIssues: string[];
-};
-
-type ArenaWeeklyReward = {
-  rank: number;
-  coins: number;
-};
-
-type AppConfig = {
-  promptMasterLessons: PromptMasterLesson[];
-  arenaWeekly: ArenaWeekly;
-  auditorScenario: AuditorScenario;
-  auditorScenarios?: AuditorScenario[];
-  arenaWeeklyRewards?: ArenaWeeklyReward[];
-  shopItems: ShopItem[];
-  courseSubmissions: CourseSubmission[];
-  createCourseFee: number;
-};
-
-type Locale = "vi" | "en";
-
-const TAB_LABELS: Record<Locale, Record<Tab, string>> = {
-  vi: {
-    dashboard: "Bảng điều khiển",
-    promptmaster: "Prompt Master",
-    arena: "Arena",
-    auditor: "Auditor",
-    history: "Lịch sử",
-    community: "Cộng đồng",
-    garden: "Khu vườn",
-    admin: "Quản trị",
-  },
-  en: {
-    dashboard: "Dashboard",
-    promptmaster: "Prompt Master",
-    arena: "Arena",
-    auditor: "Auditor",
-    history: "History",
-    community: "Community",
-    garden: "Garden",
-    admin: "Admin",
-  },
-};
-
-const I18N = {
-  vi: {
-    shopTitle: "Cửa hàng Dashboard",
-    shopDesc: "Mua vật phẩm để trang trí dashboard hoặc cho khu vườn.",
-    ownedTitle: "Vật phẩm trang trí đang sở hữu",
-    buy: "Mua",
-    sell: "Bán",
-    useTheme: "Dùng chủ đề",
-    noItems: "Bạn chưa có vật phẩm trang trí nào.",
-    gardenOwned: "Trang trí vườn đang sở hữu",
-    learn: "Học",
-    close: "Đóng",
-    progress: "Tiến độ",
-    step: "Bước",
-    step1Title: "Bước 1 - Thực trạng & bối cảnh",
-    step2Title: "Bước 2 - Phương pháp viết prompt",
-    step3Title: "Bước 3 - Thực hành & chấm điểm",
-    continueStep2: "Tiếp tục bước 2",
-    continueStep3: "Tiếp tục bước 3",
-    evaluating: "AI đang chấm...",
-    gradePromptMaster: "Chấm Prompt Master",
-    adminDeleteItem: "Xóa vật phẩm",
-    logout: "Đăng xuất",
-    feedback: "Gửi feedback",
-    send: "Gửi",
-    sending: "Đang gửi...",
-    feedbackPlaceholder: "Góp ý của bạn cho admin...",
-    feedbackSent: "Đã gửi feedback tới admin.",
-    feedbackListTitle: "Feedback người dùng",
-    noFeedback: "Chưa có feedback.",
-    deleteFeedback: "Xóa feedback",
-    viewDetail: "Xem chi tiết",
-    closeModal: "Đóng",
-    deleteAccount: "Xóa tài khoản",
-    refreshAuditor: "Làm mới đề ngẫu nhiên",
-    contactTitle: "Liên hệ đại diện",
-    contactPhone: "Số điện thoại liên hệ (đại diện): 0352358392",
-    contactEmail: "Email (đại diện): ducnmfhl31907@gmail.com",
-  },
-  en: {
-    shopTitle: "Dashboard Shop",
-    shopDesc: "Buy items to decorate your dashboard or garden.",
-    ownedTitle: "Owned decorations",
-    buy: "Buy",
-    sell: "Sell",
-    useTheme: "Apply theme",
-    noItems: "You do not own any decorations yet.",
-    gardenOwned: "Owned garden decorations",
-    learn: "Learn",
-    close: "Close",
-    progress: "Progress",
-    step: "Step",
-    step1Title: "Step 1 - Context",
-    step2Title: "Step 2 - Prompt method",
-    step3Title: "Step 3 - Practice & scoring",
-    continueStep2: "Continue to step 2",
-    continueStep3: "Continue to step 3",
-    evaluating: "AI is grading...",
-    gradePromptMaster: "Grade Prompt Master",
-    adminDeleteItem: "Delete item",
-    logout: "Logout",
-    feedback: "Send feedback",
-    send: "Send",
-    sending: "Sending...",
-    feedbackPlaceholder: "Share your feedback to admin...",
-    feedbackSent: "Feedback sent to admin.",
-    feedbackListTitle: "User feedback",
-    noFeedback: "No feedback yet.",
-    deleteFeedback: "Delete feedback",
-    viewDetail: "View details",
-    closeModal: "Close",
-    deleteAccount: "Delete account",
-    refreshAuditor: "Refresh random scenario",
-    contactTitle: "Representative contact",
-    contactPhone: "Contact phone (representative): 0352358392",
-    contactEmail: "Email (representative): ducnmfhl31907@gmail.com",
-  },
-} as const;
+import { AdminTab } from "./components/AdminTab";
+import { ArenaTab } from "./components/ArenaTab";
+import { AuditorTab } from "./components/AuditorTab";
+import { CommunityTab } from "./components/CommunityTab";
+import { DashboardTab } from "./components/DashboardTab";
+import { GardenTab } from "./components/GardenTab";
+import { PromptMasterTab } from "./components/PromptMasterTab";
+import { useGameActions } from "./hooks/useGameActions";
+import type { AppConfig, AuditorScenario, FeedbackItem, HistoryItem, Post, PromptMasterLesson, SeedSpec, User } from "./types";
+import { formatChatTime } from "./utils/format";
+import { I18N, TAB_LABELS, type Locale, type Tab } from "./utils/i18n";
+import { getActiveTabClass, getNameStyleClass, getThemeClasses } from "./utils/theme";
 
 const SESSION_TOKEN_KEY = "blabla-session-token";
 const SEED_OPTIONS: SeedSpec[] = [
@@ -233,19 +25,20 @@ const SEED_OPTIONS: SeedSpec[] = [
 
 export default function WorkspacePage() {
   const router = useRouter();
-  const [me, setMe] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [locale, setLocale] = useState<Locale>("vi");
   const [masterLoading, setMasterLoading] = useState(false);
   const [arenaLoading, setArenaLoading] = useState(false);
   const [auditorLoading, setAuditorLoading] = useState(false);
 
+  const [me, setMe] = useState<User | null>(null);
   const [histories, setHistories] = useState<HistoryItem[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [config, setConfig] = useState<AppConfig | null>(null);
+
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
-  const [config, setConfig] = useState<AppConfig | null>(null);
 
   const [selectedLessonId, setSelectedLessonId] = useState<string>("");
   const [masterPrompt, setMasterPrompt] = useState("");
@@ -309,7 +102,6 @@ export default function WorkspacePage() {
   const [shopItemThemeKey, setShopItemThemeKey] = useState<"pink" | "ocean" | "violet" | "none">("none");
   const [coursePriceDraft, setCoursePriceDraft] = useState<Record<string, number>>({});
   const [selectedSeed, setSelectedSeed] = useState<string>("seed-basic");
-  const [gameActionLoading, setGameActionLoading] = useState(false);
   const [lessonMenuId, setLessonMenuId] = useState<string>("");
   const [lessonEditDraft, setLessonEditDraft] = useState<PromptMasterLesson | null>(null);
   const [showLearningModal, setShowLearningModal] = useState(false);
@@ -376,13 +168,6 @@ export default function WorkspacePage() {
     setPosts(data.posts);
   }, []);
 
-  const formatChatTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
-
-  const refreshCommunity = useCallback(async () => {
-    await loadPosts();
-  }, [loadPosts]);
-
   const loadUsers = useCallback(async () => {
     const res = await fetch("/api/admin/users", { headers: { "x-session-token": token ?? "" } });
     if (!res.ok) return;
@@ -414,6 +199,8 @@ export default function WorkspacePage() {
     };
     setLeaderboard(data.leaderboard);
   }, []);
+
+  const { patchConfig, runGameAction, gameActionLoading } = useGameActions({ authHeaders, loadConfig, loadMe });
 
   useEffect(() => {
     if (!token) {
@@ -523,28 +310,8 @@ export default function WorkspacePage() {
   const hasNeonFrame = (me?.ownedItemIds ?? []).includes("item-neon-frame");
   const activeTheme = me?.activeDashboardTheme ?? null;
 
-  const themeClass = activeTheme === "pink"
-    ? "border-pink-300/55 bg-pink-900/30"
-    : activeTheme === "ocean"
-      ? "border-cyan-300/55 bg-cyan-900/30"
-      : activeTheme === "violet"
-        ? "border-violet-300/55 bg-violet-900/30"
-        : "border-white/10 bg-slate-900";
-  const appThemeClass = activeTheme === "pink"
-    ? "from-pink-500/16 via-rose-500/10 to-slate-950"
-    : activeTheme === "ocean"
-      ? "from-cyan-500/16 via-blue-500/10 to-slate-950"
-      : activeTheme === "violet"
-        ? "from-violet-500/16 via-fuchsia-500/10 to-slate-950"
-        : "from-slate-900 via-slate-900 to-slate-950";
+  const { themeClass, appThemeClass } = getThemeClasses(activeTheme);
   const panelClass = `tab-panel rounded-2xl border p-5 ${themeClass} ${hasNeonFrame ? "neon-frame" : ""}`;
-
-  const nameStyleClass = (styleKey?: string | null) => {
-    if (styleKey === "rainbow") return "bg-gradient-to-r from-pink-300 via-cyan-300 to-yellow-200 bg-[length:200%_200%] bg-clip-text text-transparent animate-pulse";
-    if (styleKey === "fire") return "bg-gradient-to-r from-rose-400 via-orange-300 to-amber-200 bg-[length:200%_200%] bg-clip-text text-transparent animate-pulse";
-    if (styleKey === "ocean") return "bg-gradient-to-r from-cyan-300 via-blue-300 to-indigo-300 bg-[length:200%_200%] bg-clip-text text-transparent animate-pulse";
-    return "text-slate-100";
-  };
 
   const submitPromptMaster = async () => {
     if (!selectedLesson) return;
@@ -888,37 +655,6 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     loadLeaderboard();
   };
 
-  const patchConfig = async (payload: Record<string, unknown>) => {
-    const res = await fetch("/api/config", {
-      method: "PATCH",
-      headers: authHeaders,
-      body: JSON.stringify(payload),
-    });
-    const data = (await res.json()) as { error?: string; message?: string };
-    if (!res.ok) throw new Error(data.error ?? "Không thực hiện được thao tác config.");
-    await loadConfig();
-    await loadMe();
-    return data;
-  };
-
-  const runGameAction = async (payload: Record<string, unknown>) => {
-    setGameActionLoading(true);
-    try {
-      const res = await fetch("/api/game", {
-        method: "POST",
-        headers: authHeaders,
-        body: JSON.stringify(payload),
-      });
-      const data = (await res.json()) as { error?: string; coinReward?: number };
-      if (!res.ok) throw new Error(data.error ?? "Không thực hiện được hành động.");
-      await loadMe();
-      await loadConfig();
-      return data;
-    } finally {
-      setGameActionLoading(false);
-    }
-  };
-
   const buyLesson = async (lessonId: string) => {
     try {
       await runGameAction({ action: "buy_lesson", lessonId });
@@ -1069,7 +805,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     <main className={`min-h-screen overflow-x-hidden bg-gradient-to-br px-3 py-4 text-slate-100 md:px-8 md:py-8 ${appThemeClass}`}>
       <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[260px_1fr]">
         <aside className={`rounded-2xl border p-4 ${themeClass}`}>
-          <h1 className={`text-lg font-bold ${nameStyleClass(me?.activeNameStyle)}`}>{me?.name ?? "Loading..."}</h1>
+          <h1 className={`text-lg font-bold ${getNameStyleClass(me?.activeNameStyle)}`}>{me?.name ?? "Loading..."}</h1>
           <p className="text-sm text-slate-300">{me?.email}</p>
           <p className="mt-1 text-xs text-cyan-300">Chuỗi đăng nhập: {me?.loginStreak ?? 0} ngày</p>
           <div className="mt-3 flex gap-2">
@@ -1083,7 +819,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 key={key}
                 onClick={() => { playUiSound(480); setActiveTab(key); }}
                 className={`w-full rounded-lg px-3 py-2 text-center text-sm transition-all duration-300 md:text-left ${
-                  activeTab === key ? (activeTheme === "pink" ? "bg-pink-300 text-slate-950" : activeTheme === "ocean" ? "bg-cyan-300 text-slate-950" : activeTheme === "violet" ? "bg-violet-300 text-slate-950" : "bg-cyan-400 text-slate-950") : hasNeonFrame ? "bg-white/5 neon-chip" : "bg-white/5"
+                  getActiveTabClass(activeTab === key, activeTheme, hasNeonFrame)
                 }`}
               >
                 {TAB_LABELS[locale][key]}
@@ -1127,7 +863,8 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           </div>
 
           {activeTab === "dashboard" && (
-            <div className={panelClass}>
+            <DashboardTab>
+              <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
               {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
               <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
@@ -1215,11 +952,13 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   </div>
                 ) : null}
               </div>
-            </div>
+              </div>
+            </DashboardTab>
           )}
 
           {activeTab === "promptmaster" && config && (
-            <div className={panelClass}>
+            <PromptMasterTab>
+              <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Prompt Master - Nhiều khóa học</h2>
               {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
               <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -1367,11 +1106,13 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   </div>
                 </div>
               ) : null}
-            </div>
+              </div>
+            </PromptMasterTab>
           )}
 
           {activeTab === "arena" && config && (
-            <div className={panelClass}>
+            <ArenaTab>
+              <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Clean Prompt Arena - Chủ đề tuần</h2>
               {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
               <p className="mt-2 text-sm text-slate-300">{config.arenaWeekly.weekLabel}: {config.arenaWeekly.title}</p>
@@ -1402,11 +1143,13 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   </div>
                 ))}
               </div>
-            </div>
+              </div>
+            </ArenaTab>
           )}
 
           {activeTab === "auditor" && config && (
-            <div className={panelClass}>
+            <AuditorTab>
+              <div className={panelClass}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold text-cyan-200">AI Auditor</h2>
                 {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
@@ -1419,12 +1162,14 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               <textarea value={auditorRePrompt} onChange={(e)=>setAuditorRePrompt(e.target.value)} className="mt-2 h-24 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Prompt sửa lại để AI trả lời đúng..."/>
               <button onClick={() => { playUiSound(760); void submitAuditor(); }} disabled={auditorLoading || !auditorRePrompt.trim()} className="mt-3 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">{auditorLoading ? "AI đang chấm..." : "Chấm điểm Auditor"}</button>
               {auditorResult ? <p className="mt-2 whitespace-pre-line text-sm">{auditorResult}</p> : null}
-            </div>
+              </div>
+            </AuditorTab>
           )}
 
 
           {activeTab === "garden" && (
-            <div className={panelClass}>
+            <GardenTab>
+              <div className={panelClass}>
               <h2 className="text-xl font-semibold text-emerald-200">Trồng cây</h2>
               {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
               <p className="mt-1 text-sm text-slate-300">Mảnh đất của bạn dùng Endless Coin để mua hạt giống, gieo, tưới và thu hoạch.</p>
@@ -1461,7 +1206,8 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               </div>
               {gardenMsg ? <p className="mt-2 text-xs text-emerald-200">{gardenMsg}</p> : null}
               {harvestFxActive ? <div className="pointer-events-none mt-2 animate-pulse text-center text-2xl">🎉 ✨ 🎆 ✨ 🎉</div> : null}
-            </div>
+              </div>
+            </GardenTab>
           )}
 
           {activeTab === "history" && (
@@ -1480,7 +1226,8 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
 
           {activeTab === "community" && (
-            <div className={panelClass}>
+            <CommunityTab>
+              <div className={panelClass}>
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold text-cyan-200">Chat cộng đồng</h2>
                 {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
@@ -1517,7 +1264,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                           }`}
                         >
                           <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                            <span className={mine ? "text-cyan-200" : "text-slate-300"}><span className={nameStyleClass(post.activeNameStyle)}>{post.userName}</span> <span className="text-[10px] uppercase text-cyan-300/80">({post.userRole ?? "member"})</span></span>
+                            <span className={mine ? "text-cyan-200" : "text-slate-300"}><span className={getNameStyleClass(post.activeNameStyle)}>{post.userName}</span> <span className="text-[10px] uppercase text-cyan-300/80">({post.userRole ?? "member"})</span></span>
                             <span className="text-slate-400">{formatChatTime(post.createdAt)}</span>
                           </div>
                           <p className="whitespace-pre-wrap break-words">{post.content}</p>
@@ -1562,11 +1309,13 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 </button>
               </div>
               {communityError ? <p className="mt-2 text-xs text-rose-300">{communityError}</p> : null}
-            </div>
+              </div>
+            </CommunityTab>
           )}
 
           {activeTab === "admin" && me?.isAdmin && (
-            <div className={panelClass}>
+            <AdminTab>
+              <div className={panelClass}>
               <h2 className="text-xl font-semibold text-amber-200">Admin Control</h2>
               {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
 
@@ -1708,7 +1457,8 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   </div>
                 </div>
               )}
-            </div>
+              </div>
+            </AdminTab>
           )}
         </section>
       </div>
