@@ -1068,12 +1068,19 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                       <button
                         key={theme.id}
                         onClick={async () => {
-                          await runGameAction({ action: "set_dashboard_theme", themeKey: theme.themeKey });
-                          setShopMsg(`Đã áp dụng chủ đề ${theme.name}.`);
+                          const nextTheme = theme.themeKey ?? null;
+                          setMe((prev) => (prev ? { ...prev, activeDashboardTheme: nextTheme } : prev));
+                          try {
+                            await runGameAction({ action: "set_dashboard_theme", themeKey: theme.themeKey });
+                            setShopMsg(`Đã áp dụng chủ đề ${theme.name}.`);
+                          } catch (error) {
+                            await loadMe();
+                            setShopMsg(error instanceof Error ? error.message : "Không áp dụng được chủ đề.");
+                          }
                         }}
-                        className={`rounded-lg border px-3 py-1 text-xs ${activeTheme === theme.themeKey ? "border-pink-300/60 text-pink-200" : "border-white/20 text-slate-200"}`}
+                        className={`rounded-lg border px-3 py-1 text-xs ${activeTheme === theme.themeKey ? "border-pink-300/70 bg-pink-500/20 text-pink-100" : "border-white/20 text-slate-200"}`}
                       >
-                        {text.useTheme} {theme.name}
+                        {activeTheme === theme.themeKey ? `✅ Đang dùng ${theme.name}` : `${text.useTheme} ${theme.name}`}
                       </button>
                     ))}
                   </div>
