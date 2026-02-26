@@ -959,12 +959,12 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
             <button onClick={() => setLocale("en")} className={`rounded-md border px-2 py-1 text-xs ${locale === "en" ? "border-cyan-300 text-cyan-200" : "border-white/20 text-slate-300"}`}>ENG</button>
           </div>
 
-          <div className="mt-5 flex gap-2 overflow-x-auto pb-1 md:block md:space-y-2 md:overflow-visible">
+          <div className="mt-5 grid grid-cols-2 gap-2 md:block md:space-y-2">
             {(["dashboard", "promptmaster", "arena", "auditor", "history", "community", "garden", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]).map((key) => (
               <button
                 key={key}
                 onClick={() => { playUiSound(480); setActiveTab(key); }}
-                className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-center text-sm transition-all duration-300 md:w-full md:whitespace-normal md:text-left ${
+                className={`w-full rounded-lg px-3 py-2 text-center text-sm transition-all duration-300 md:text-left ${
                   activeTab === key ? (activeTheme === "pink" ? "bg-pink-300 text-slate-950" : activeTheme === "ocean" ? "bg-cyan-300 text-slate-950" : activeTheme === "violet" ? "bg-violet-300 text-slate-950" : "bg-cyan-400 text-slate-950") : hasNeonFrame ? "bg-white/5 neon-chip" : "bg-white/5"
                 }`}
               >
