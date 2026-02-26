@@ -948,7 +948,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
   }, [config, selectedLessonId]);
 
   return (
-    <main className={`min-h-screen bg-gradient-to-br px-4 py-6 text-slate-100 md:px-8 md:py-8 ${appThemeClass}`}>
+    <main className={`min-h-screen overflow-x-hidden bg-gradient-to-br px-3 py-4 text-slate-100 md:px-8 md:py-8 ${appThemeClass}`}>
       <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[260px_1fr]">
         <aside className={`rounded-2xl border p-4 ${themeClass}`}>
           <h1 className="text-lg font-bold">{me?.name ?? "Loading..."}</h1>
@@ -959,12 +959,12 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
             <button onClick={() => setLocale("en")} className={`rounded-md border px-2 py-1 text-xs ${locale === "en" ? "border-cyan-300 text-cyan-200" : "border-white/20 text-slate-300"}`}>ENG</button>
           </div>
 
-          <div className="mt-5 space-y-2">
+          <div className="mt-5 flex gap-2 overflow-x-auto pb-1 md:block md:space-y-2 md:overflow-visible">
             {(["dashboard", "promptmaster", "arena", "auditor", "history", "community", "garden", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]).map((key) => (
               <button
                 key={key}
                 onClick={() => { playUiSound(480); setActiveTab(key); }}
-                className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-all duration-300 ${
+                className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-center text-sm transition-all duration-300 md:w-full md:whitespace-normal md:text-left ${
                   activeTab === key ? (activeTheme === "pink" ? "bg-pink-300 text-slate-950" : activeTheme === "ocean" ? "bg-cyan-300 text-slate-950" : activeTheme === "violet" ? "bg-violet-300 text-slate-950" : "bg-cyan-400 text-slate-950") : hasNeonFrame ? "bg-white/5 neon-chip" : "bg-white/5"
                 }`}
               >
@@ -984,7 +984,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           </button>
         </aside>
 
-        <section className={`space-y-4 rounded-2xl border p-4 scrollbar-pro max-h-[84vh] overflow-y-auto ${themeClass}`}>
+        <section className={`space-y-4 break-words rounded-2xl border p-4 md:max-h-[84vh] md:overflow-y-auto scrollbar-pro ${themeClass}`}>
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Điểm trung bình</p><p className="text-2xl font-bold">{avgScore}%</p></div>
             <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Số ngày đăng nhập</p><p className="text-2xl font-bold">{me?.totalLoginDays ?? 0}</p></div>
