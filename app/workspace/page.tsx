@@ -347,7 +347,7 @@ export default function WorkspacePage() {
   const remainSec = Math.ceil(remainMs / 1000);
   const ownedDecorations = (config?.shopItems ?? []).filter((item) => (me?.ownedItemIds ?? []).includes(item.id));
   const ownedThemes = ownedDecorations.filter((item) => item.category === "dashboard-theme" && item.themeKey);
-  const ownedThemeLabels = ownedThemes.map((item) => THEME_LABELS[item.themeKey ?? ""] ?? item.name);
+  const ownedThemeLabels = ownedThemes.map((item) => item.name);
   const ownedDashboardDecorations = ownedDecorations.filter((item) => item.category === "dashboard-decoration");
   const ownedGardenDecorations = ownedDecorations.filter((item) => item.category === "garden-decoration");
   const hasNeonFrame = (me?.ownedItemIds ?? []).includes("item-neon-frame");
@@ -1054,11 +1054,12 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 ) : null}
                 {ownedThemes.length ? (
                   <div className="mt-3">
-                    <p className="mb-2 text-xs text-cyan-200">Sơn chủ đề đã sở hữu: {ownedThemeLabels.join(" • ")}</p>
+                    <p className="mb-2 text-xs text-cyan-200">Nút chọn sơn đã sở hữu: {ownedThemeLabels.join(" • ")}</p>
                     <div className="flex flex-wrap gap-2">
                       {ownedThemes.map((theme) => {
                         const themeKey = theme.themeKey ?? "";
                         const themeLabel = THEME_LABELS[themeKey] ?? theme.name;
+                        const paintLabel = theme.name?.trim().startsWith("Sơn") ? theme.name : `Sơn ${themeLabel}`;
                         const activeButtonClass = themeKey === "pink"
                           ? "border-pink-300/70 bg-pink-500/20 text-pink-100"
                           : themeKey === "ocean"
@@ -1090,7 +1091,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                               setMe((prev) => (prev ? { ...prev, activeDashboardTheme: nextTheme } : prev));
                               try {
                                 await runGameAction({ action: "set_dashboard_theme", themeKey: theme.themeKey });
-                                setShopMsg(`Đã áp dụng màu ${themeLabel}.`);
+                                setShopMsg(`Đã áp dụng ${paintLabel}.`);
                               } catch (error) {
                                 await loadMe();
                                 setShopMsg(error instanceof Error ? error.message : "Không áp dụng được chủ đề.");
@@ -1098,7 +1099,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                             }}
                             className={`rounded-lg border px-3 py-1 text-xs ${activeTheme === theme.themeKey ? activeButtonClass : idleButtonClass}`}
                           >
-                            {activeTheme === theme.themeKey ? `✅ Đang dùng màu ${themeLabel}` : `${text.useTheme} màu ${themeLabel}`}
+                            {activeTheme === theme.themeKey ? `✅ Đang dùng ${paintLabel}` : `${text.useTheme} ${paintLabel}`}
                           </button>
                         );
                       })}
