@@ -22,6 +22,8 @@ export type User = {
   };
   activeDashboardTheme?: string | null;
   activeNameStyle?: string | null;
+  mutedUntil?: string | null;
+  bannedUntil?: string | null;
 };
 
 export type HistoryItem = { id: string; type?: "master" | "arena" | "auditor"; title: string; score: number; feedback: string; createdAt: string };
@@ -31,6 +33,16 @@ export type Post = {
   userName: string;
   content: string;
   createdAt: string;
+  userId?: string;
+  status?: "active" | "hidden" | "deleted";
+  moderation?: {
+    reportedCount: number;
+    lastReportedAt: string | null;
+    hiddenAt: string | null;
+    hiddenByUserId: string | null;
+    deletedAt: string | null;
+    deletedByUserId: string | null;
+  };
   userRole?: string;
   activeNameStyle?: string | null;
   type?: "message" | "coin-gift" | "system";
@@ -41,6 +53,18 @@ export type Post = {
     claimedUserIds: string[];
     creatorUserName: string;
   };
+};
+
+export type PostReport = {
+  id: string;
+  postId: string;
+  reporterUserId: string;
+  reporterName: string;
+  reason: string;
+  status: "pending" | "resolved" | "rejected";
+  createdAt: string;
+  reviewedAt: string | null;
+  adminNote: string | null;
 };
 
 export type FeedbackItem = {

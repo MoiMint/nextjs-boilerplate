@@ -11,7 +11,7 @@ import { DashboardTab } from "./components/DashboardTab";
 import { GardenTab } from "./components/GardenTab";
 import { PromptMasterTab } from "./components/PromptMasterTab";
 import { useGameActions } from "./hooks/useGameActions";
-import type { AppConfig, AuditorScenario, FeedbackItem, HistoryItem, Post, PromptMasterLesson, SeedSpec, User } from "./types";
+import type { AppConfig, AuditorScenario, FeedbackItem, HistoryItem, Post, PostReport, PromptMasterLesson, SeedSpec, User } from "./types";
 import { formatChatTime } from "./utils/format";
 import { I18N, TAB_LABELS, type Locale, type Tab } from "./utils/i18n";
 import { getActiveTabClass, getNameStyleClass, getThemeClasses } from "./utils/theme";
@@ -35,6 +35,9 @@ export default function WorkspacePage() {
   const [me, setMe] = useState<User | null>(null);
   const [histories, setHistories] = useState<HistoryItem[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [postReports, setPostReports] = useState<PostReport[]>([]);
+  const [postNextCursor, setPostNextCursor] = useState<string | null>(null);
+  const [reportReasonByPost, setReportReasonByPost] = useState<Record<string, string>>({});
   const [config, setConfig] = useState<AppConfig | null>(null);
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -164,11 +167,17 @@ export default function WorkspacePage() {
     setHistories(data.histories);
   }, [token]);
 
-  const loadPosts = useCallback(async () => {
-    const res = await fetch("/api/posts");
-    const data = (await res.json()) as { posts: Post[] };
-    setPosts(data.posts);
-  }, []);
+  const loadPosts = useCallback(async (cursor?: string | null, mode: "reset" | "append" = "reset") => {
+    const params = new URLSearchParams({ limit: "30" });
+    if (cursor) params.set("before", cursor);
+    if (me?.isAdmin) params.set("reports", "true");
+    const res = await fetch(`/api/posts?${params.toString()}`, { headers: { "x-session-token": token ?? "" } });
+    if (!res.ok) return;
+    const data = (await res.json()) as { posts: Post[]; reports?: PostReport[]; pageInfo?: { nextCursor?: string | null } };
+    setPosts((prev) => (mode === "append" ? [...prev, ...data.posts] : data.posts));
+    setPostReports(data.reports ?? []);
+    setPostNextCursor(data.pageInfo?.nextCursor ?? null);
+  }, [me?.isAdmin, token]);
 
   const loadUsers = useCallback(async () => {
     const res = await fetch("/api/admin/users", { headers: { "x-session-token": token ?? "" } });
@@ -205,7 +214,7 @@ export default function WorkspacePage() {
   const { patchConfig, runGameAction, gameActionLoading } = useGameActions({ authHeaders, loadConfig, loadMe });
 
   const refreshCommunity = useCallback(async () => {
-    await loadPosts();
+    await loadPosts(null, "reset");
   }, [loadPosts]);
 
   useEffect(() => {
@@ -628,6 +637,55 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     communityStickToBottomRef.current = true;
     await refreshCommunity();
     setCommunitySending(false);
+  };
+
+  const reportPost = async (postId: string) => {
+    const reason = (reportReasonByPost[postId] ?? "").trim();
+    if (!reason) {
+      setCommunityError("Vui lòng nhập lý do report.");
+      return;
+    }
+    const res = await fetch("/api/posts", {
+      method: "PUT",
+      headers: authHeaders,
+      body: JSON.stringify({ postId, reason }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setCommunityError(data.error ?? "Không report được bài viết.");
+      return;
+    }
+    setReportReasonByPost((prev) => ({ ...prev, [postId]: "" }));
+    setCommunityError("");
+    await refreshCommunity();
+  };
+
+  const moderatePost = async (postId: string, status: "active" | "hidden" | "deleted") => {
+    const res = await fetch("/api/posts", {
+      method: "PATCH",
+      headers: authHeaders,
+      body: JSON.stringify({ action: "moderate-post", postId, status }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setCommunityError(data.error ?? "Không thể cập nhật trạng thái bài viết.");
+      return;
+    }
+    await refreshCommunity();
+  };
+
+  const reviewReport = async (reportId: string, decision: "resolved" | "rejected", postStatus?: "active" | "hidden" | "deleted") => {
+    const res = await fetch("/api/posts", {
+      method: "PATCH",
+      headers: authHeaders,
+      body: JSON.stringify({ action: "review-report", reportId, decision, postStatus }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setCommunityError(data.error ?? "Không xử lý report được.");
+      return;
+    }
+    await refreshCommunity();
   };
 
   const createAdmin = async () => {
@@ -1317,6 +1375,8 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   .reverse()
                   .map((post) => {
                     const mine = post.userName === me?.name;
+                    const isHidden = post.status === "hidden";
+                    const isDeleted = post.status === "deleted";
                     return (
                       <div key={post.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                         <div
@@ -1330,7 +1390,8 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                             <span className={mine ? "text-cyan-200" : "text-slate-300"}><span className={getNameStyleClass(post.activeNameStyle)}>{post.userName}</span> <span className="text-[10px] uppercase text-cyan-300/80">({post.userRole ?? "member"})</span></span>
                             <span className="text-slate-400">{formatChatTime(post.createdAt)}</span>
                           </div>
-                          <p className="whitespace-pre-wrap break-words">{post.content}</p>
+                          <p className="whitespace-pre-wrap break-words">{isDeleted ? "[Bài viết đã bị xóa]" : isHidden ? "[Bài viết đã bị ẩn]" : post.content}</p>
+                          <p className="mt-1 text-[11px] text-slate-400">Reports: {post.moderation?.reportedCount ?? 0} • Status: {post.status ?? "active"}</p>
                           {post.type === "coin-gift" && post.gift ? (
                             <div className="mt-2 rounded-lg border border-amber-300/30 bg-amber-500/10 p-2 text-xs">
                               <p>Đã nhận: {post.gift.claimedUserIds.length}/{post.gift.maxReceivers} người</p>
@@ -1343,12 +1404,58 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                               </button>
                             </div>
                           ) : null}
+                          {!me?.isAdmin && post.status === "active" ? (
+                            <div className="mt-2 rounded-md border border-rose-300/20 p-2">
+                              <input
+                                value={reportReasonByPost[post.id] ?? ""}
+                                onChange={(e) => setReportReasonByPost((prev) => ({ ...prev, [post.id]: e.target.value }))}
+                                className="w-full rounded border border-white/15 bg-slate-900 px-2 py-1 text-xs"
+                                placeholder="Lý do report..."
+                              />
+                              <button onClick={() => void reportPost(post.id)} className="mt-1 rounded border border-rose-300/40 px-2 py-1 text-xs text-rose-200">Report</button>
+                            </div>
+                          ) : null}
+                          {me?.isAdmin ? (
+                            <div className="mt-2 flex flex-wrap gap-1 text-xs">
+                              <button onClick={() => void moderatePost(post.id, "hidden")} className="rounded border border-amber-300/40 px-2 py-1 text-amber-200">Ẩn</button>
+                              <button onClick={() => void moderatePost(post.id, "deleted")} className="rounded border border-rose-300/40 px-2 py-1 text-rose-200">Xóa</button>
+                              <button onClick={() => void moderatePost(post.id, "active")} className="rounded border border-emerald-300/40 px-2 py-1 text-emerald-200">Khôi phục</button>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     );
                   })}
                 {!posts.length ? <p className="text-center text-xs text-slate-400">Chưa có tin nhắn nào.</p> : null}
+                {postNextCursor ? (
+                  <div className="pt-2 text-center">
+                    <button onClick={() => void loadPosts(postNextCursor, "append")} className="rounded border border-white/20 px-3 py-1 text-xs text-slate-200">Tải thêm tin cũ</button>
+                  </div>
+                ) : null}
               </div>
+
+              {me?.isAdmin ? (
+                <div className="mt-3 rounded-xl border border-amber-300/20 bg-slate-950/70 p-3">
+                  <p className="text-sm font-semibold text-amber-200">Hàng chờ report ({postReports.filter((item) => item.status === "pending").length})</p>
+                  <div className="mt-2 max-h-40 space-y-2 overflow-y-auto text-xs">
+                    {postReports.map((report) => (
+                      <div key={report.id} className="rounded border border-white/10 p-2">
+                        <p className="text-slate-200">#{report.postId.slice(0, 8)} • {report.reporterName}</p>
+                        <p className="text-slate-400">{report.reason}</p>
+                        <p className="text-slate-500">{report.status}</p>
+                        {report.status === "pending" ? (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            <button onClick={() => void reviewReport(report.id, "resolved", "hidden")} className="rounded border border-amber-300/40 px-2 py-1 text-amber-200">Duyệt + Ẩn</button>
+                            <button onClick={() => void reviewReport(report.id, "resolved", "deleted")} className="rounded border border-rose-300/40 px-2 py-1 text-rose-200">Duyệt + Xóa</button>
+                            <button onClick={() => void reviewReport(report.id, "rejected")} className="rounded border border-slate-300/40 px-2 py-1 text-slate-200">Bỏ qua</button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                    {!postReports.length ? <p className="text-slate-500">Chưa có report.</p> : null}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mt-3 flex gap-2">
                 <textarea
