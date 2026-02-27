@@ -5,17 +5,66 @@ type GeminiGenerateResponse = {
 };
 
 function normalizeModelName(name: string) {
-  return name.startsWith("models/") ? name.replace("models/", "") : name;
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/^models\//, "")
+    .replace(/\s+/g, "-");
 }
 
 const DISABLED_MODEL_HINTS = ["tts", "image", "embedding", "vision"];
 
+// Keep defaults focused on models that are commonly available for low-cost / free-tier usage.
+const FREE_TIER_MODEL_FALLBACKS = [
+  "gemini-2.0-flash-lite",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+];
+
+function resolveModelAliases(input: string) {
+  const normalized = normalizeModelName(input);
+
+  const aliasMap: Record<string, string[]> = {
+    "gemini-2.0-flash": ["gemini-2.0-flash"],
+    "gemini-2.0-flash-lite": ["gemini-2.0-flash-lite", "gemini-2.0-flash"],
+    "gemini-1.5-flash": ["gemini-1.5-flash"],
+    "gemini-2.5-flash": ["gemini-2.0-flash", "gemini-1.5-flash"],
+    "gemini-2.5-flash-lite": ["gemini-2.0-flash-lite", "gemini-2.0-flash"],
+    "gemini-2.5-flash-tts": [],
+    "gemini-3-flash": ["gemini-2.0-flash", "gemini-1.5-flash"],
+  };
+
+  return aliasMap[normalized] ?? [normalized];
+}
+
+function isRunnableTextModel(model: string) {
+  return !DISABLED_MODEL_HINTS.some((hint) => model.includes(hint));
+}
+
 function parseEnvModels() {
   return (process.env.GEMINI_MODELS ?? "gemini-2.5-flash,gemini-2.0-flash")
     .split(",")
-    .map((m) => normalizeModelName(m.trim()))
+    .map((m) => m.trim())
+    .filter(Boolean);
+
+  const expanded = raw.flatMap((model) => resolveModelAliases(model));
+
+  const combined = [...expanded, ...FREE_TIER_MODEL_FALLBACKS]
+    .map((model) => normalizeModelName(model))
     .filter(Boolean)
-    .filter((m) => !DISABLED_MODEL_HINTS.some((hint) => m.toLowerCase().includes(hint)));
+    .filter(isRunnableTextModel);
+
+  return combined.filter((model, index) => combined.indexOf(model) === index);
+}
+
+function compactErrorText(raw: string) {
+  const text = raw.replace(/\s+/g, " ").trim();
+  return text.length <= 180 ? text : `${text.slice(0, 180)}...`;
+}
+
+function isQuotaExceededError(raw: string) {
+  const normalized = raw.toLowerCase();
+  return normalized.includes("quota") || normalized.includes("billing") || normalized.includes("exceeded your current quota");
 }
 
 function parseApiKeys() {
@@ -48,7 +97,11 @@ async function callModel(args: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: args.prompt }] }],
-        generationConfig: args.responseMimeType ? { responseMimeType: args.responseMimeType } : undefined,
+        generationConfig: {
+          ...(args.responseMimeType ? { responseMimeType: args.responseMimeType } : {}),
+          maxOutputTokens: 512,
+          temperature: 0.5,
+        },
       }),
     },
   );
@@ -104,6 +157,28 @@ async function runGemini(args: { prompt: string; responseMimeType?: string }) {
   return { ok: false as const, error: errors.join(" | ") };
 }
 
+function parseJudgeResult(text: string) {
+  const trimmed = text.trim();
+
+  const direct = (() => {
+    try {
+      return JSON.parse(trimmed) as { score?: number; feedback?: string };
+    } catch {
+      return null;
+    }
+  })();
+  if (direct) return direct;
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+  if (!fenced) return null;
+
+  try {
+    return JSON.parse(fenced) as { score?: number; feedback?: string };
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { prompt, context, mode } = (await request.json()) as {
@@ -156,17 +231,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    try {
-      const parsed = JSON.parse(result.text) as { score?: number; feedback?: string };
-      return NextResponse.json({
-        score: parsed.score ?? 70,
-        feedback: parsed.feedback ?? "Không có feedback.",
-        model: result.model,
-        apiVersion: result.apiVersion,
-      });
-    } catch {
+    const parsed = parseJudgeResult(result.text);
+    if (!parsed) {
       return NextResponse.json({ score: 70, feedback: result.text, model: result.model, apiVersion: result.apiVersion });
     }
+
+    return NextResponse.json({
+      score: parsed.score ?? 70,
+      feedback: parsed.feedback ?? "Không có feedback.",
+      model: result.model,
+      apiVersion: result.apiVersion,
+    });
   } catch {
     return NextResponse.json({ error: "Không thể xử lý yêu cầu AI." }, { status: 500 });
   }
