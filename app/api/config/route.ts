@@ -70,6 +70,12 @@ export async function PATCH(request: NextRequest) {
     rejectSubmissionId?: string;
     deleteShopItemId?: string;
     grantCoins?: { userId?: string; amount: number };
+    addAuditorScenario?: {
+      title: string;
+      wrongAnswer: string;
+      requiredIssues: string[];
+    };
+    deleteAuditorScenarioTitle?: string;
   };
 
   const db = await readDB();
@@ -195,6 +201,40 @@ export async function PATCH(request: NextRequest) {
       if (!activeThemeStillOwned) user.activeDashboardTheme = null;
       return user;
     });
+  }
+
+  if (body.addAuditorScenario) {
+    const title = body.addAuditorScenario.title.trim();
+    if (!title) {
+      return NextResponse.json({ error: "Tiêu đề câu hỏi Auditor không được để trống." }, { status: 400 });
+    }
+
+    const requiredIssues = (body.addAuditorScenario.requiredIssues ?? [])
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (!requiredIssues.length) {
+      return NextResponse.json({ error: "Cần ít nhất 1 lỗi đúng cho câu hỏi Auditor." }, { status: 400 });
+    }
+
+    const list = db.config.auditorScenarios ?? [db.config.auditorScenario];
+    if (!list.some((item) => item.title === title)) {
+      list.push({
+        title,
+        wrongAnswer: body.addAuditorScenario.wrongAnswer?.trim() || "",
+        requiredIssues,
+      });
+    }
+    db.config.auditorScenarios = list;
+    db.config.auditorScenario = list[0] ?? db.config.auditorScenario;
+  }
+
+  if (body.deleteAuditorScenarioTitle) {
+    const list = (db.config.auditorScenarios ?? [db.config.auditorScenario]).filter(
+      (item) => item.title !== body.deleteAuditorScenarioTitle,
+    );
+    db.config.auditorScenarios = list.length ? list : [db.config.auditorScenario];
+    db.config.auditorScenario = db.config.auditorScenarios[0] ?? db.config.auditorScenario;
   }
 
   if (body.grantCoins) {

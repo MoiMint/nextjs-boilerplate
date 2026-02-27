@@ -26,6 +26,23 @@ export type User = {
 
 export type HistoryItem = { id: string; type?: "master" | "arena" | "auditor"; title: string; score: number; feedback: string; createdAt: string };
 
+export type WeeklyGoal = {
+  id: string;
+  userId: string;
+  startsAt: string;
+  deadline: string;
+  targetMaster: number;
+  targetArena: number;
+  targetAuditor: number;
+  progressMaster: number;
+  progressArena: number;
+  progressAuditor: number;
+  completedAt: string | null;
+  rewardClaimedAt: string | null;
+  rewardCoins: number;
+  updatedAt: string;
+};
+
 export type Post = {
   id: string;
   userName: string;

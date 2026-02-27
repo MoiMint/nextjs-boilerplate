@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromToken, newId, readDB, writeDB } from "@/app/lib/server-db";
+import { updateGoalProgressFromHistory } from "@/app/lib/weekly-goals";
 
 function tokenCount(text: string) {
   return text.trim() ? text.trim().split(/\s+/).length : 0;
@@ -57,7 +58,8 @@ export async function POST(request: NextRequest) {
 
   const dbUser = db.users.find((item) => item.id === user.id);
   if (dbUser) dbUser.coins += 35;
+  const goalUpdate = updateGoalProgressFromHistory(db, user.id, "arena");
 
   await writeDB(db);
-  return NextResponse.json({ accuracy, tokens, efficiency, reward: 35 });
+  return NextResponse.json({ accuracy, tokens, efficiency, reward: 35, goalReward: goalUpdate.rewarded, goal: goalUpdate.goal });
 }

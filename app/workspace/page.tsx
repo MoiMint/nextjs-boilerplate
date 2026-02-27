@@ -11,7 +11,7 @@ import { DashboardTab } from "./components/DashboardTab";
 import { GardenTab } from "./components/GardenTab";
 import { PromptMasterTab } from "./components/PromptMasterTab";
 import { useGameActions } from "./hooks/useGameActions";
-import type { AppConfig, AuditorScenario, FeedbackItem, HistoryItem, Post, PromptMasterLesson, SeedSpec, User } from "./types";
+import type { AppConfig, AuditorScenario, FeedbackItem, HistoryItem, Post, PromptMasterLesson, SeedSpec, User, WeeklyGoal } from "./types";
 import { formatChatTime } from "./utils/format";
 import { I18N, TAB_LABELS, type Locale, type Tab } from "./utils/i18n";
 import { getActiveTabClass, getNameStyleClass, getThemeClasses } from "./utils/theme";
@@ -36,6 +36,11 @@ export default function WorkspacePage() {
   const [histories, setHistories] = useState<HistoryItem[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
+  const [goalDraft, setGoalDraft] = useState({ targetMaster: 2, targetArena: 1, targetAuditor: 1, rewardCoins: 120, deadline: "" });
+  const [goalMsg, setGoalMsg] = useState("");
+  const [canManageGoal, setCanManageGoal] = useState(false);
+  const [goalScope, setGoalScope] = useState<"self" | "global">("self");
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -85,6 +90,9 @@ export default function WorkspacePage() {
   const [newArenaTitle, setNewArenaTitle] = useState("");
   const [newArenaInput, setNewArenaInput] = useState("");
   const [newArenaGolden, setNewArenaGolden] = useState("");
+  const [newAuditorTitle, setNewAuditorTitle] = useState("");
+  const [newAuditorWrongAnswer, setNewAuditorWrongAnswer] = useState("");
+  const [newAuditorIssues, setNewAuditorIssues] = useState("");
 
   const [shopMsg, setShopMsg] = useState("");
   const [gardenMsg, setGardenMsg] = useState("");
@@ -101,7 +109,7 @@ export default function WorkspacePage() {
   const [shopItemPrice, setShopItemPrice] = useState(80);
   const [shopItemEffect, setShopItemEffect] = useState("Trang trí dashboard");
   const [shopItemCategory, setShopItemCategory] = useState<"dashboard-theme" | "dashboard-decoration" | "garden-decoration">("dashboard-decoration");
-  const [shopItemThemeKey, setShopItemThemeKey] = useState<"pink" | "ocean" | "violet" | "none">("none");
+  const [shopItemThemeKey, setShopItemThemeKey] = useState<"pink" | "ocean" | "violet" | "sunset" | "aurora" | "matrix" | "none">("none");
   const [coursePriceDraft, setCoursePriceDraft] = useState<Record<string, number>>({});
   const [selectedSeed, setSelectedSeed] = useState<string>("seed-basic");
   const [lessonMenuId, setLessonMenuId] = useState<string>("");
@@ -164,6 +172,14 @@ export default function WorkspacePage() {
     setHistories(data.histories);
   }, [token]);
 
+  const loadWeeklyGoal = useCallback(async () => {
+    const res = await fetch("/api/goals", { headers: { "x-session-token": token ?? "" } });
+    if (!res.ok) return;
+    const data = (await res.json()) as { goal: WeeklyGoal | null; canManageGlobal?: boolean };
+    setWeeklyGoal(data.goal);
+    setCanManageGoal(!!data.canManageGlobal);
+  }, [token]);
+
   const loadPosts = useCallback(async () => {
     const res = await fetch("/api/posts");
     const data = (await res.json()) as { posts: Post[] };
@@ -218,7 +234,8 @@ export default function WorkspacePage() {
     loadPosts();
     loadConfig();
     loadLeaderboard();
-  }, [router, token, loadMe, loadHistories, loadPosts, loadConfig, loadLeaderboard]);
+    loadWeeklyGoal();
+  }, [router, token, loadMe, loadHistories, loadPosts, loadConfig, loadLeaderboard, loadWeeklyGoal]);
 
   useEffect(() => {
     if (me?.isAdmin) {
@@ -308,6 +325,23 @@ export default function WorkspacePage() {
     window.localStorage.setItem("blabla-locale", locale);
   }, [locale]);
 
+  useEffect(() => {
+    if (weeklyGoal) {
+      setGoalDraft({
+        targetMaster: weeklyGoal.targetMaster,
+        targetArena: weeklyGoal.targetArena,
+        targetAuditor: weeklyGoal.targetAuditor,
+        rewardCoins: weeklyGoal.rewardCoins,
+        deadline: weeklyGoal.deadline.slice(0, 10),
+      });
+      return;
+    }
+
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    setGoalDraft((prev) => ({ ...prev, deadline: nextWeek.toISOString().slice(0, 10) }));
+  }, [weeklyGoal]);
+
   const text = I18N[locale];
 
   const avgScore = histories.length
@@ -319,6 +353,43 @@ export default function WorkspacePage() {
   ).size;
   const arenaAttempts = histories.filter((item) => item.type === "arena").length;
   const auditorAttempts = histories.filter((item) => item.type === "auditor").length;
+  const weeklyGoalTotal = (weeklyGoal?.targetMaster ?? 0) + (weeklyGoal?.targetArena ?? 0) + (weeklyGoal?.targetAuditor ?? 0);
+  const weeklyGoalProgress = (weeklyGoal?.progressMaster ?? 0) + (weeklyGoal?.progressArena ?? 0) + (weeklyGoal?.progressAuditor ?? 0);
+  const weeklyGoalPercent = weeklyGoalTotal > 0 ? Math.min(100, Math.round((weeklyGoalProgress / weeklyGoalTotal) * 100)) : 0;
+
+  const recommendation = useMemo(() => {
+    const recentByType = (type: "master" | "arena" | "auditor") => histories.filter((item) => item.type === type).slice(0, 3);
+    const buckets = (["master", "arena", "auditor"] as const).map((type) => {
+      const items = recentByType(type);
+      const avg = items.length ? items.reduce((sum, item) => sum + item.score, 0) / items.length : 0;
+      return { type, avg, attempts: items.length };
+    });
+
+    const practiced = buckets.filter((item) => item.attempts > 0);
+    const weakest = (practiced.length ? practiced : buckets).sort((a, b) => a.avg - b.avg)[0];
+
+    if (weakest.type === "master") {
+      const nextLesson = config?.promptMasterLessons.find((lesson) => !me?.unlockedLessonIds?.includes(lesson.id))
+        ?? config?.promptMasterLessons[0];
+      return {
+        title: "Recommended next lesson: PromptMaster",
+        detail: nextLesson ? `${nextLesson.title} (${nextLesson.topic})` : "Ôn lại bài PromptMaster gần nhất",
+      };
+    }
+
+    if (weakest.type === "arena") {
+      return {
+        title: "Recommended next challenge: Arena",
+        detail: config ? `${config.arenaWeekly.weekLabel} - ${config.arenaWeekly.title}` : "Làm thêm 1 đề Arena để cải thiện tốc độ",
+      };
+    }
+
+    const auditorTarget = activeAuditorScenario ?? config?.auditorScenarios?.[0] ?? config?.auditorScenario;
+    return {
+      title: "Recommended next challenge: AI Auditor",
+      detail: auditorTarget ? auditorTarget.title : "Luyện phát hiện lỗi AI với case mới",
+    };
+  }, [activeAuditorScenario, config, histories, me?.unlockedLessonIds]);
   const communityPosts = posts.length;
   const topArena = leaderboard[0];
   const myArenaRank = me ? leaderboard.findIndex((entry) => entry.userName === me.name) + 1 : 0;
@@ -329,6 +400,7 @@ export default function WorkspacePage() {
   const remainSec = Math.ceil(remainMs / 1000);
   const ownedDecorations = (config?.shopItems ?? []).filter((item) => (me?.ownedItemIds ?? []).includes(item.id));
   const ownedThemes = ownedDecorations.filter((item) => item.category === "dashboard-theme" && item.themeKey);
+  const ownedNameStyles = ownedDecorations.filter((item) => item.category === "name-style" && item.nameStyleKey);
   const ownedDashboardDecorations = ownedDecorations.filter((item) => item.category === "dashboard-decoration");
   const ownedGardenDecorations = ownedDecorations.filter((item) => item.category === "garden-decoration");
   const hasNeonFrame = (me?.ownedItemIds ?? []).includes("item-neon-frame");
@@ -351,9 +423,12 @@ ${masterPrompt}`;
       body: JSON.stringify({ context: "Prompt Master Practice", mode: "generate", prompt: aiRunPrompt }),
     });
     const aiRunData = (await aiRunRes.json()) as { output?: string; error?: string };
-    const generatedOutput = aiRunRes.ok
-      ? aiRunData.output ?? "AI chưa tạo được output."
-      : aiRunData.error ?? "AI không tạo được output.";
+    if (!aiRunRes.ok || !aiRunData.output?.trim()) {
+      setMasterResult(aiRunData.error ?? "AI đang bận, chưa tạo được output cho Prompt Master. Vui lòng thử lại sau ít phút.");
+      setMasterLoading(false);
+      return;
+    }
+    const generatedOutput = aiRunData.output;
 
     const reviewerPrompt = `Bạn là reviewer chỉ tập trung vào chất lượng prompt, KHÔNG biết nội dung đề bài cụ thể.
 Hãy đánh giá prompt sau theo tiêu chí rõ vai trò, rõ output, ràng buộc và khả năng lặp cải tiến.
@@ -369,7 +444,7 @@ ${masterPrompt}`;
     const reviewerData = (await reviewerRes.json()) as { score?: number; feedback?: string; error?: string };
     const reviewerFeedback = reviewerRes.ok
       ? reviewerData.feedback ?? "Reviewer chưa có phản hồi."
-      : reviewerData.error ?? "Reviewer gặp lỗi.";
+      : "Reviewer tạm thời quá tải, hệ thống sẽ dùng tổng kết cuối để chấm.";
 
     const auditorPrompt = `Bạn là AI tổng kết biết đầy đủ bối cảnh bài học.
 Thông tin bài học:
@@ -396,10 +471,12 @@ Nhiệm vụ: tự kiểm tra output AI và phản hồi reviewer đã bám yêu
     });
 
     const finalData = (await finalRes.json()) as { score?: number; feedback?: string; error?: string };
-    const score = finalRes.ok ? finalData.score ?? 72 : 60;
+    const localPromptWords = masterPrompt.trim().split(/\s+/).filter(Boolean).length;
+    const localScore = Math.max(45, Math.min(92, Math.round(45 + Math.min(40, localPromptWords * 1.2))));
+    const score = finalRes.ok ? finalData.score ?? 72 : localScore;
     const finalFeedback = finalRes.ok
       ? finalData.feedback ?? "Không có nhận xét cuối."
-      : finalData.error ?? "AI tổng kết lỗi.";
+      : "AI tổng kết đang quá tải, hệ thống tạm chấm theo độ rõ ràng prompt. Bạn có thể nộp lại để lấy tổng kết AI đầy đủ.";
 
     await fetch("/api/history", {
       method: "POST",
@@ -413,6 +490,7 @@ Nhiệm vụ: tự kiểm tra output AI và phản hồi reviewer đã bám yêu
     });
 
     await loadHistories();
+    await loadWeeklyGoal();
     await loadMe();
     setMasterResult(`AI tạo output: ${generatedOutput}\n\nReviewer: ${reviewerFeedback}\n\nĐiểm cuối: ${score}% | Tổng kết: ${finalFeedback}\n\n+40 Endless Coin`);
     setMasterLoading(false);
@@ -475,6 +553,7 @@ Accuracy: ${data.accuracy}% | Tokens: ${data.tokens} | Efficiency: ${data.effici
     );
     await loadLeaderboard();
     await loadHistories();
+    await loadWeeklyGoal();
     await loadMe();
     setArenaResult((prev) => `${prev}\n\n+35 Endless Coin`);
     setArenaLoading(false);
@@ -507,9 +586,11 @@ ${auditorRePrompt}`;
       body: JSON.stringify({ context: "AI Auditor Correction", mode: "generate", prompt: correctedAnswerPrompt }),
     });
     const correctionData = (await correctionRes.json()) as { output?: string; error?: string };
-    const correctedAnswer = correctionRes.ok
-      ? correctionData.output ?? ""
-      : correctionData.error ?? "AI không tạo được câu trả lời sửa.";
+    const correctedAnswer = correctionRes.ok && correctionData.output?.trim()
+      ? correctionData.output
+      : `${auditorRePrompt}
+
+(Tạm dùng prompt sửa của bạn do AI quá tải ở bước sinh câu trả lời.)`;
 
     const judgePrompt = `Danh sách lỗi đúng cần tìm: ${scenario.requiredIssues.join(", ")}
 Người dùng phát hiện lỗi: ${auditorIssues}
@@ -524,8 +605,17 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     });
 
     const data = (await res.json()) as { score?: number; feedback?: string; error?: string };
-    const score = res.ok ? data.score ?? 75 : 65;
-    const feedback = res.ok ? data.feedback ?? "Không có nhận xét." : data.error ?? "AI lỗi.";
+    const fallbackScore = (() => {
+      const combined = `${auditorIssues} ${correctedAnswer}`.toLowerCase();
+      const hits = scenario.requiredIssues.filter((item) => combined.includes(item.toLowerCase())).length;
+      const ratio = scenario.requiredIssues.length ? hits / scenario.requiredIssues.length : 0.5;
+      return Math.max(55, Math.min(95, Math.round(55 + ratio * 40)));
+    })();
+
+    const score = res.ok ? (data.score ?? 75) : fallbackScore;
+    const feedback = res.ok
+      ? (data.feedback ?? "Không có nhận xét.")
+      : "AI chấm điểm đang quá tải, hệ thống tạm chấm theo mức độ khớp lỗi bạn phát hiện. Bạn có thể gửi lại để lấy chấm điểm AI đầy đủ.";
 
     await fetch("/api/history", {
       method: "POST",
@@ -539,9 +629,32 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     });
 
     await loadHistories();
+    await loadWeeklyGoal();
     await loadMe();
     setAuditorResult(`AI trả lời sau khi sửa: ${correctedAnswer}\n\nĐiểm: ${score}% | Nhận xét: ${feedback}\n\n+30 Endless Coin`);
     setAuditorLoading(false);
+  };
+
+  const saveWeeklyGoal = async () => {
+    setGoalMsg("");
+    const res = await fetch("/api/goals", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ ...goalDraft, scope: goalScope }),
+    });
+    const data = (await res.json()) as { error?: string; rewarded?: number; rewardedTotal?: number; goal?: WeeklyGoal | null; scope?: "self" | "global" };
+    if (!res.ok) {
+      setGoalMsg(data.error ?? "Không lưu được mục tiêu tuần.");
+      return;
+    }
+
+    setWeeklyGoal(data.goal ?? null);
+    if (data.scope === "global") {
+      setGoalMsg(`Đã cập nhật mục tiêu tuần global cho toàn server.${typeof data.rewardedTotal === "number" && data.rewardedTotal > 0 ? ` Tổng thưởng đã phát: ${data.rewardedTotal} coin.` : ""}`);
+    } else {
+      setGoalMsg(data.rewarded ? `Mục tiêu hoàn tất! +${data.rewarded} coin thưởng tuần.` : "Đã cập nhật mục tiêu tuần của bạn.");
+    }
+    await loadMe();
   };
 
   const postCommunity = async () => {
@@ -917,6 +1030,46 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
               {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
               <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
+
+              <div className="mt-4 rounded-xl border border-violet-300/30 bg-violet-500/10 p-4">
+                <p className="text-xs uppercase tracking-wide text-violet-200">Card đầu: gợi ý học tiếp</p>
+                <p className="mt-1 text-lg font-semibold text-violet-100">{recommendation.title}</p>
+                <p className="mt-1 text-sm text-slate-200">{recommendation.detail}</p>
+                <p className="mt-2 text-xs text-violet-200">Dựa trên điểm thấp nhất trong 3 lần gần nhất theo từng loại bài.</p>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-500/10 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-amber-200">Weekly Goals</p>
+                    <p className="text-xs text-slate-300">{canManageGoal ? "Bạn có thể đặt mục tiêu cho bản thân hoặc toàn server." : "Bạn có thể tự đặt mục tiêu tuần của mình."} Thưởng {goalDraft.rewardCoins} coin khi hoàn thành.</p>
+                  </div>
+                  <p className="text-xs text-amber-100">{weeklyGoal?.deadline ? `Deadline: ${weeklyGoal.deadline.slice(0, 10)}` : "Chưa đặt"}</p>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-900/70">
+                  <div className="h-full rounded-full bg-amber-300 transition-all" style={{ width: `${weeklyGoalPercent}%` }} />
+                </div>
+                <p className="mt-2 text-xs text-amber-100">Tiến độ: {weeklyGoalProgress}/{weeklyGoalTotal} ({weeklyGoalPercent}%) • Master {weeklyGoal?.progressMaster ?? 0}/{goalDraft.targetMaster} • Arena {weeklyGoal?.progressArena ?? 0}/{goalDraft.targetArena} • Auditor {weeklyGoal?.progressAuditor ?? 0}/{goalDraft.targetAuditor}</p>
+                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
+                  <label className="space-y-1"><span>Master</span><input type="number" min={0} value={goalDraft.targetMaster} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetMaster: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                  <label className="space-y-1"><span>Arena</span><input type="number" min={0} value={goalDraft.targetArena} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetArena: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                  <label className="space-y-1"><span>Auditor</span><input type="number" min={0} value={goalDraft.targetAuditor} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetAuditor: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                  <label className="space-y-1"><span>Coin thưởng</span><input type="number" min={0} value={goalDraft.rewardCoins} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, rewardCoins: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                  <label className="space-y-1"><span>Deadline</span><input type="date" value={goalDraft.deadline} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, deadline: e.target.value }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                </div>
+                {canManageGoal ? (
+                  <label className="mt-2 inline-flex items-center gap-2 text-xs">
+                    <span>Phạm vi:</span>
+                    <select value={goalScope} onChange={(e)=>setGoalScope(e.target.value as "self" | "global")} className="rounded border border-white/20 bg-slate-900 px-2 py-1">
+                      <option value="self">Chỉ mình tôi</option>
+                      <option value="global">Toàn server (admin)</option>
+                    </select>
+                  </label>
+                ) : null}
+                <button onClick={() => void saveWeeklyGoal()} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-100">Lưu mục tiêu tuần</button>
+                {goalMsg ? <p className="mt-2 text-xs text-amber-100">{goalMsg}</p> : null}
+              </div>
+
               <div className="mt-3 rounded-lg border border-cyan-300/20 bg-slate-900/60 p-3 text-xs text-cyan-100">
                 <p className="font-semibold">{text.contactTitle}</p>
                 <p className="mt-1">{text.contactPhone}</p>
@@ -1000,6 +1153,30 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                     ))}
                   </div>
                 ) : null}
+                {ownedNameStyles.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {ownedNameStyles.map((style) => (
+                      <button
+                        key={style.id}
+                        onClick={async () => {
+                          const nextStyle = style.nameStyleKey ?? null;
+                          setMe((prev) => (prev ? { ...prev, activeNameStyle: nextStyle } : prev));
+                          try {
+                            await runGameAction({ action: "set_name_style", nameStyleKey: style.nameStyleKey });
+                            setShopMsg(`Đã áp dụng style tên ${style.name}.`);
+                          } catch (error) {
+                            await loadMe();
+                            setShopMsg(error instanceof Error ? error.message : "Không áp dụng được style tên.");
+                          }
+                        }}
+                        className={`rounded-lg border px-3 py-1 text-xs ${me?.activeNameStyle === style.nameStyleKey ? "border-emerald-300/70 bg-emerald-500/20 text-emerald-100" : "border-white/20 text-slate-200"}`}
+                      >
+                        {me?.activeNameStyle === style.nameStyleKey ? `✅ Đang dùng ${style.name}` : `Dùng tên ${style.name}`}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {shopMsg ? <p className="mt-3 text-xs text-amber-200">{shopMsg}</p> : null}
               </div>
               </div>
             </DashboardTab>
@@ -1045,7 +1222,6 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   </div>
                 ))}
               </div>
-              {shopMsg ? <p className="mt-2 text-xs text-amber-200">{shopMsg}</p> : null}
               {lessonMenuId && lessonEditDraft ? (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
                   <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-white/15 bg-slate-950/95 p-3 text-xs">
@@ -1404,6 +1580,22 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 <button onClick={addPromptLesson} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-sm text-cyan-200">Thêm khóa Prompt Master</button>
               </div>
 
+              <h3 className="mt-4 font-semibold text-violet-200">Thêm câu hỏi AI Auditor</h3>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <input value={newAuditorTitle} onChange={(e)=>setNewAuditorTitle(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tiêu đề case Auditor"/>
+                <input value={newAuditorWrongAnswer} onChange={(e)=>setNewAuditorWrongAnswer(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Câu trả lời sai của AI"/>
+                <textarea value={newAuditorIssues} onChange={(e)=>setNewAuditorIssues(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2 md:col-span-2" placeholder="Mỗi dòng là 1 lỗi đúng cần tìm"/>
+              </div>
+              <button onClick={async ()=>{ await patchConfig({ addAuditorScenario: { title: newAuditorTitle, wrongAnswer: newAuditorWrongAnswer, requiredIssues: newAuditorIssues.split("\n") } }); setAdminMsg("Đã thêm câu hỏi AI Auditor."); setNewAuditorTitle(""); setNewAuditorWrongAnswer(""); setNewAuditorIssues(""); }} className="mt-2 rounded-lg border border-violet-300/40 px-3 py-2 text-sm text-violet-200">Thêm câu hỏi Auditor</button>
+              <div className="mt-2 space-y-1 text-xs">
+                {(config?.auditorScenarios ?? []).map((scenario) => (
+                  <div key={scenario.title} className="flex items-center justify-between rounded border border-white/10 px-2 py-1">
+                    <span>{scenario.title}</span>
+                    <button onClick={async ()=>{ await patchConfig({ deleteAuditorScenarioTitle: scenario.title }); setAdminMsg("Đã xóa câu hỏi Auditor."); }} className="rounded border border-rose-300/40 px-2 py-0.5 text-rose-300">Xóa</button>
+                  </div>
+                ))}
+              </div>
+
               <h3 className="mt-4 font-semibold text-amber-200">Duyệt khóa học người dùng gửi</h3>
               <div className="mt-2 space-y-2">
                 {(config?.courseSubmissions ?? []).map((sub) => (
@@ -1437,10 +1629,13 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <option value="dashboard-theme">Dashboard theme</option>
                 </select>
                 {shopItemCategory === "dashboard-theme" ? (
-                  <select value={shopItemThemeKey} onChange={(e)=>setShopItemThemeKey(e.target.value as "pink" | "ocean" | "violet" | "none")} className="rounded-lg border border-white/15 bg-slate-800 p-2">
+                  <select value={shopItemThemeKey} onChange={(e)=>setShopItemThemeKey(e.target.value as "pink" | "ocean" | "violet" | "sunset" | "aurora" | "matrix" | "none")} className="rounded-lg border border-white/15 bg-slate-800 p-2">
                     <option value="pink">pink</option>
                     <option value="ocean">ocean</option>
                     <option value="violet">violet</option>
+                    <option value="sunset">sunset</option>
+                    <option value="aurora">aurora</option>
+                    <option value="matrix">matrix</option>
                   </select>
                 ) : <div />}
               </div>
