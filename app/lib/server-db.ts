@@ -85,6 +85,8 @@ export type DBUser = {
   };
   activeDashboardTheme?: string | null;
   activeNameStyle?: string | null;
+  mutedUntil?: string | null;
+  bannedUntil?: string | null;
 };
 
 export type DBSession = {
@@ -113,6 +115,15 @@ export type DBPost = {
   userName: string;
   content: string;
   createdAt: string;
+  status?: "active" | "hidden" | "deleted";
+  moderation?: {
+    reportedCount: number;
+    lastReportedAt: string | null;
+    hiddenAt: string | null;
+    hiddenByUserId: string | null;
+    deletedAt: string | null;
+    deletedByUserId: string | null;
+  };
   type?: "message" | "coin-gift" | "system";
   gift?: {
     totalCoins: number;
@@ -121,6 +132,20 @@ export type DBPost = {
     claimedUserIds: string[];
     creatorUserName: string;
   };
+};
+
+export type DBPostReport = {
+  id: string;
+  postId: string;
+  postOwnerId: string;
+  reporterUserId: string;
+  reporterName: string;
+  reason: string;
+  status: "pending" | "resolved" | "rejected";
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewedByUserId: string | null;
+  adminNote: string | null;
 };
 
 export type DBFeedback = {
@@ -158,6 +183,7 @@ export type DBShape = {
   sessions: DBSession[];
   histories: DBHistory[];
   posts: DBPost[];
+  postReports?: DBPostReport[];
   feedbacks: DBFeedback[];
   arenaSubmissions: DBArenaSubmission[];
   config: DBConfig;
@@ -306,6 +332,9 @@ const defaultConfig: DBConfig = {
     { id: "item-theme-pink", name: "Sơn hồng dashboard", image: "🎨", price: 180, effect: "Đổi dashboard sang chủ đề hồng", category: "dashboard-theme", themeKey: "pink" },
     { id: "item-theme-ocean", name: "Sơn đại dương", image: "🌊", price: 220, effect: "Đổi dashboard sang chủ đề đại dương", category: "dashboard-theme", themeKey: "ocean" },
     { id: "item-theme-violet", name: "Sơn tím galaxy", image: "🪐", price: 260, effect: "Đổi dashboard sang chủ đề tím", category: "dashboard-theme", themeKey: "violet" },
+    { id: "item-theme-sunset", name: "Sơn hoàng hôn", image: "🌇", price: 280, effect: "Gradient cam-hồng đổi màu liên tục", category: "dashboard-theme", themeKey: "sunset" },
+    { id: "item-theme-aurora", name: "Sơn cực quang", image: "🌌", price: 320, effect: "Gradient xanh-tím chuyển động", category: "dashboard-theme", themeKey: "aurora" },
+    { id: "item-theme-matrix", name: "Sơn matrix", image: "🟢", price: 300, effect: "Gradient xanh neon cyber", category: "dashboard-theme", themeKey: "matrix" },
     { id: "item-name-rainbow", name: "Tên cầu vồng", image: "🌈", price: 300, effect: "Màu tên gradient đổi liên tục", category: "name-style", nameStyleKey: "rainbow" },
     { id: "item-name-fire", name: "Tên lửa", image: "🔥", price: 280, effect: "Màu tên đỏ-cam nổi bật", category: "name-style", nameStyleKey: "fire" },
     { id: "item-name-ocean", name: "Tên đại dương", image: "🌊", price: 280, effect: "Màu tên xanh chuyển động", category: "name-style", nameStyleKey: "ocean" },
@@ -418,6 +447,8 @@ const adminSeed: DBUser = {
   },
   activeDashboardTheme: null,
   activeNameStyle: null,
+  mutedUntil: null,
+  bannedUntil: null,
 };
 
 const defaultDB = (): DBShape => ({
@@ -425,6 +456,7 @@ const defaultDB = (): DBShape => ({
   sessions: [],
   histories: [],
   posts: [],
+  postReports: [],
   feedbacks: [],
   arenaSubmissions: [],
   config: defaultConfig,
@@ -460,6 +492,8 @@ function ensureUserStats(user: Partial<DBUser>): DBUser {
     },
     activeDashboardTheme: user.activeDashboardTheme ?? null,
     activeNameStyle: user.activeNameStyle ?? null,
+    mutedUntil: user.mutedUntil ?? null,
+    bannedUntil: user.bannedUntil ?? null,
   };
 }
 
@@ -609,6 +643,15 @@ function ensureAdmin(db: DBShape): DBShape {
   db.arenaSubmissions = db.arenaSubmissions ?? [];
   db.posts = (db.posts ?? []).map((post) => ({
     ...post,
+    status: post.status ?? "active",
+    moderation: {
+      reportedCount: post.moderation?.reportedCount ?? 0,
+      lastReportedAt: post.moderation?.lastReportedAt ?? null,
+      hiddenAt: post.moderation?.hiddenAt ?? null,
+      hiddenByUserId: post.moderation?.hiddenByUserId ?? null,
+      deletedAt: post.moderation?.deletedAt ?? null,
+      deletedByUserId: post.moderation?.deletedByUserId ?? null,
+    },
     type: post.type ?? "message",
     gift: post.gift
       ? {
@@ -618,6 +661,7 @@ function ensureAdmin(db: DBShape): DBShape {
         }
       : undefined,
   }));
+  db.postReports = db.postReports ?? [];
   db.config = ensureConfig(db.config);
   return db;
 }

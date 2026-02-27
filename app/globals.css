@@ -69,3 +69,49 @@ body {
   box-shadow: 0 0 8px rgba(34, 211, 238, 0.4);
   border-color: rgba(34, 211, 238, 0.5);
 }
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.theme-bg-sunset {
+  background-image: linear-gradient(120deg, rgba(249,115,22,0.18), rgba(236,72,153,0.2), rgba(59,130,246,0.08));
+  background-size: 220% 220%;
+  animation: gradientShift 8s ease infinite;
+}
+
+.theme-bg-aurora {
+  background-image: linear-gradient(120deg, rgba(34,211,238,0.18), rgba(59,130,246,0.14), rgba(168,85,247,0.18));
+  background-size: 220% 220%;
+  animation: gradientShift 7s ease-in-out infinite;
+}
+
+.theme-bg-matrix {
+  background-image: linear-gradient(120deg, rgba(16,185,129,0.18), rgba(34,197,94,0.2), rgba(20,83,45,0.32));
+  background-size: 220% 220%;
+  animation: gradientShift 6s linear infinite;
+}
+
+.theme-panel-sunset {
+  background-image: linear-gradient(120deg, rgba(249,115,22,0.14), rgba(236,72,153,0.14));
+  background-size: 220% 220%;
+  animation: gradientShift 8s ease infinite;
+}
+
+.theme-panel-aurora {
+  background-image: linear-gradient(120deg, rgba(34,211,238,0.14), rgba(59,130,246,0.12), rgba(168,85,247,0.16));
+  background-size: 220% 220%;
+  animation: gradientShift 7s ease-in-out infinite;
+}
+
+.theme-panel-matrix {
+  background-image: linear-gradient(120deg, rgba(16,185,129,0.14), rgba(34,197,94,0.14), rgba(5,150,105,0.16));
+  background-size: 220% 220%;
+  animation: gradientShift 6s linear infinite;
+}
+
+.dashboard-ornament {
+  filter: drop-shadow(0 0 8px rgba(34,211,238,0.35));
+}
