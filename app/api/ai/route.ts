@@ -98,8 +98,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Thiếu prompt." }, { status: 400 });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    const primaryKey = process.env.GEMINI_API_KEY;
+    const backupKey = process.env.GEMINI_API_KEY_BACKUP;
+    const apiKeys = [primaryKey, backupKey].filter((item): item is string => !!item && item.trim().length > 0);
+    if (!apiKeys.length) {
       return NextResponse.json(
         {
           error: "Chưa cấu hình GEMINI_API_KEY trên server. Hãy thêm key vào biến môi trường để dùng AI thật.",
@@ -110,7 +112,12 @@ export async function POST(request: NextRequest) {
 
     if (mode === "generate") {
       const generatorPrompt = `Bạn là AI thực thi prompt cho nền tảng Blabla.\nContext: ${context ?? "General"}\nHãy thực thi prompt người dùng và trả về nội dung trả lời tốt nhất ở dạng text thuần.\n\nPrompt người dùng:\n${prompt}`;
-      const result = await runGemini({ apiKey, prompt: generatorPrompt });
+      let result: Awaited<ReturnType<typeof runGemini>> | null = null;
+      for (const apiKey of apiKeys) {
+        result = await runGemini({ apiKey, prompt: generatorPrompt });
+        if (result.ok) break;
+      }
+      if (!result) result = { ok: false as const, error: "No API key configured" };
       if (!result.ok) {
         return NextResponse.json(
           {
@@ -127,7 +134,12 @@ export async function POST(request: NextRequest) {
 
     const userPrompt = `Bạn là AI Judge cho nền tảng Blabla.\nContext: ${context ?? "General"}\nNhiệm vụ:\n1) Chấm điểm 0-100.\n2) Feedback ngắn gọn 2-3 câu.\n3) Trả về JSON: {"score": number, "feedback": string}.\n\nPrompt người dùng:\n${prompt}`;
 
-    const result = await runGemini({ apiKey, prompt: userPrompt, responseMimeType: "application/json" });
+    let result: Awaited<ReturnType<typeof runGemini>> | null = null;
+    for (const apiKey of apiKeys) {
+      result = await runGemini({ apiKey, prompt: userPrompt, responseMimeType: "application/json" });
+      if (result.ok) break;
+    }
+    if (!result) result = { ok: false as const, error: "No API key configured" };
     if (!result.ok) {
       return NextResponse.json(
         {

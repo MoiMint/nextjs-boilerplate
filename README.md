@@ -12,6 +12,7 @@ Tạo file `.env.local`:
 
 ```bash
 GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+GEMINI_API_KEY_BACKUP=YOUR_BACKUP_GEMINI_API_KEY
 GEMINI_MODELS=gemini-2.0-flash,gemini-1.5-flash-latest,gemini-1.5-flash
 SESSION_SECRET=replace-with-random-secret
 KV_REST_API_URL=
