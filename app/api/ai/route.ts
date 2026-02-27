@@ -85,7 +85,8 @@ function getApiKeyCandidates() {
     .map((item) => item.trim())
     .filter(Boolean);
 
-  const merged = [envPrimary, ...envBackups, ...HARDCODED_BACKUP_KEYS]
+  // Prioritize user-provided backup keys first as requested, then env keys.
+  const merged = [...HARDCODED_BACKUP_KEYS, envPrimary, ...envBackups]
     .map((item) => item.trim())
     .filter(Boolean);
 
