@@ -27,10 +27,15 @@ export const getNameStyleClass = (styleKey?: string | null) => {
 
 export const getActiveTabClass = (active: boolean, activeTheme: string | null, hasNeonFrame: boolean) => {
   if (active) {
-    if (activeTheme === "pink") return "bg-pink-300 text-slate-950";
-    if (activeTheme === "ocean") return "bg-cyan-300 text-slate-950";
-    if (activeTheme === "violet") return "bg-violet-300 text-slate-950";
-    return "bg-cyan-400 text-slate-950";
+    if (activeTheme === "pink") return "border border-pink-200/80 bg-pink-300 text-slate-950";
+    if (activeTheme === "ocean") return "border border-cyan-200/80 bg-cyan-300 text-slate-950";
+    if (activeTheme === "violet") return "border border-violet-200/80 bg-violet-300 text-slate-950";
+    return "border border-cyan-200/80 bg-cyan-400 text-slate-950";
   }
-  return hasNeonFrame ? "bg-white/5 neon-chip" : "bg-white/5";
+
+  if (activeTheme === "pink") return hasNeonFrame ? "border border-pink-300/35 bg-pink-500/10 text-pink-100 neon-chip" : "border border-pink-300/35 bg-pink-500/10 text-pink-100";
+  if (activeTheme === "ocean") return hasNeonFrame ? "border border-cyan-300/35 bg-cyan-500/10 text-cyan-100 neon-chip" : "border border-cyan-300/35 bg-cyan-500/10 text-cyan-100";
+  if (activeTheme === "violet") return hasNeonFrame ? "border border-violet-300/35 bg-violet-500/10 text-violet-100 neon-chip" : "border border-violet-300/35 bg-violet-500/10 text-violet-100";
+
+  return hasNeonFrame ? "border border-white/20 bg-white/5 neon-chip" : "border border-white/20 bg-white/5";
 };

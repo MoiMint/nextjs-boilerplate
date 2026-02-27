@@ -23,6 +23,12 @@ const SEED_OPTIONS: SeedSpec[] = [
   { id: "seed-sun", name: "Hạt hướng dương", price: 120, reward: 380, growHours: 12 },
   { id: "seed-moon", name: "Hạt ánh trăng", price: 240, reward: 820, growHours: 20 },
 ];
+const THEME_LABELS: Record<string, string> = {
+  pink: "Hồng",
+  ocean: "Đại dương",
+  violet: "Tím",
+};
+
 
 export default function WorkspacePage() {
   const router = useRouter();
@@ -338,6 +344,7 @@ export default function WorkspacePage() {
   const remainSec = Math.ceil(remainMs / 1000);
   const ownedDecorations = (config?.shopItems ?? []).filter((item) => (me?.ownedItemIds ?? []).includes(item.id));
   const ownedThemes = ownedDecorations.filter((item) => item.category === "dashboard-theme" && item.themeKey);
+  const ownedThemeLabels = ownedThemes.map((item) => THEME_LABELS[item.themeKey ?? ""] ?? item.name);
   const ownedDashboardDecorations = ownedDecorations.filter((item) => item.category === "dashboard-decoration");
   const ownedGardenDecorations = ownedDecorations.filter((item) => item.category === "garden-decoration");
   const hasNeonFrame = (me?.ownedItemIds ?? []).includes("item-neon-frame");
@@ -973,7 +980,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
             <DashboardTab>
               <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Dashboard năng lực AI</h2>
-              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
+              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">{item.image} {item.name}</span>)}</div> : null}
               <p className="mt-2 text-sm text-slate-300">Learning by Doing & Winning - học qua nhiệm vụ thật và dữ liệu thật.</p>
               <div className="mt-3 rounded-lg border border-cyan-300/20 bg-slate-900/60 p-3 text-xs text-cyan-100">
                 <p className="font-semibold">{text.contactTitle}</p>
@@ -1036,26 +1043,44 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <p className="mt-3 text-xs text-emerald-200">{text.gardenOwned}: {ownedGardenDecorations.map((item)=>`${item.image} ${item.name}`).join(" • ")}</p>
                 ) : null}
                 {ownedThemes.length ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {ownedThemes.map((theme) => (
-                      <button
-                        key={theme.id}
-                        onClick={async () => {
-                          const nextTheme = theme.themeKey ?? null;
-                          setMe((prev) => (prev ? { ...prev, activeDashboardTheme: nextTheme } : prev));
-                          try {
-                            await runGameAction({ action: "set_dashboard_theme", themeKey: theme.themeKey });
-                            setShopMsg(`Đã áp dụng chủ đề ${theme.name}.`);
-                          } catch (error) {
-                            await loadMe();
-                            setShopMsg(error instanceof Error ? error.message : "Không áp dụng được chủ đề.");
-                          }
-                        }}
-                        className={`rounded-lg border px-3 py-1 text-xs ${activeTheme === theme.themeKey ? "border-pink-300/70 bg-pink-500/20 text-pink-100" : "border-white/20 text-slate-200"}`}
-                      >
-                        {activeTheme === theme.themeKey ? `✅ Đang dùng ${theme.name}` : `${text.useTheme} ${theme.name}`}
-                      </button>
-                    ))}
+                  <div className="mt-3">
+                    <p className="mb-2 text-xs text-cyan-200">Sơn chủ đề đã sở hữu: {ownedThemeLabels.join(" • ")}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {ownedThemes.map((theme) => {
+                        const themeKey = theme.themeKey ?? "";
+                        const themeLabel = THEME_LABELS[themeKey] ?? theme.name;
+                        const activeButtonClass = themeKey === "pink"
+                          ? "border-pink-300/70 bg-pink-500/20 text-pink-100"
+                          : themeKey === "ocean"
+                            ? "border-cyan-300/70 bg-cyan-500/20 text-cyan-100"
+                            : "border-violet-300/70 bg-violet-500/20 text-violet-100";
+                        const idleButtonClass = themeKey === "pink"
+                          ? "border-pink-300/40 text-pink-100"
+                          : themeKey === "ocean"
+                            ? "border-cyan-300/40 text-cyan-100"
+                            : "border-violet-300/40 text-violet-100";
+
+                        return (
+                          <button
+                            key={theme.id}
+                            onClick={async () => {
+                              const nextTheme = theme.themeKey ?? null;
+                              setMe((prev) => (prev ? { ...prev, activeDashboardTheme: nextTheme } : prev));
+                              try {
+                                await runGameAction({ action: "set_dashboard_theme", themeKey: theme.themeKey });
+                                setShopMsg(`Đã áp dụng màu ${themeLabel}.`);
+                              } catch (error) {
+                                await loadMe();
+                                setShopMsg(error instanceof Error ? error.message : "Không áp dụng được chủ đề.");
+                              }
+                            }}
+                            className={`rounded-lg border px-3 py-1 text-xs ${activeTheme === theme.themeKey ? activeButtonClass : idleButtonClass}`}
+                          >
+                            {activeTheme === theme.themeKey ? `✅ Đang dùng màu ${themeLabel}` : `${text.useTheme} màu ${themeLabel}`}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -1067,7 +1092,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
             <PromptMasterTab>
               <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Prompt Master - Nhiều khóa học</h2>
-              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
+              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">{item.image} {item.name}</span>)}</div> : null}
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {config.promptMasterLessons.map((lesson) => (
                   <div key={lesson.id} className={`relative rounded-lg border p-3 ${selectedLesson?.id===lesson.id?'border-cyan-300 bg-cyan-500/10':'border-white/10 bg-slate-800/70'}`}>
@@ -1221,7 +1246,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
             <ArenaTab>
               <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Clean Prompt Arena - Chủ đề tuần</h2>
-              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
+              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">{item.image} {item.name}</span>)}</div> : null}
               <p className="mt-2 text-sm text-slate-300">{config.arenaWeekly.weekLabel}: {config.arenaWeekly.title}</p>
               <p className="mt-2 rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">Input: {config.arenaWeekly.inputText}</p>
               <textarea value={arenaPrompt} onChange={(e)=>setArenaPrompt(e.target.value)} className="mt-3 h-20 w-full rounded-lg border border-white/15 bg-slate-900 p-2" placeholder="Prompt của bạn"/>
@@ -1259,7 +1284,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               <div className={panelClass}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold text-cyan-200">AI Auditor</h2>
-                {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
+                {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">{item.image} {item.name}</span>)}</div> : null}
                 <button onClick={randomizeAuditorScenario} disabled={auditorLoading} className="rounded-lg border border-cyan-300/50 px-3 py-2 text-sm text-cyan-200 disabled:opacity-50">{text.refreshAuditor}</button>
               </div>
               <p className="mt-2 text-sm text-cyan-100">Đề hiện tại: {(activeAuditorScenario ?? config.auditorScenario).title}</p>
@@ -1278,7 +1303,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
             <GardenTab>
               <div className={panelClass}>
               <h2 className="text-xl font-semibold text-emerald-200">Trồng cây</h2>
-              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
+              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">{item.image} {item.name}</span>)}</div> : null}
               <p className="mt-1 text-sm text-slate-300">Mảnh đất của bạn dùng Endless Coin để mua hạt giống, gieo, tưới và thu hoạch.</p>
 
               <div className="mt-3 rounded-xl border border-white/10 bg-slate-900/70 p-4">
@@ -1320,7 +1345,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           {activeTab === "history" && (
             <div className={panelClass}>
               <h2 className="text-xl font-semibold text-cyan-200">Lịch sử cá nhân</h2>
-              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
+              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">{item.image} {item.name}</span>)}</div> : null}
               <div className="mt-3 space-y-2">
                 {histories.map((item) => (
                   <div key={item.id} className="rounded-lg border border-white/10 bg-slate-800/70 p-3 text-sm">
@@ -1337,7 +1362,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               <div className={panelClass}>
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold text-cyan-200">Chat cộng đồng</h2>
-                {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
+                {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">{item.image} {item.name}</span>)}</div> : null}
                 <button
                   onClick={refreshCommunity}
                   className="rounded-lg border border-cyan-300/40 px-3 py-2 text-xs text-cyan-200"
@@ -1487,7 +1512,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
             <AdminTab>
               <div className={panelClass}>
               <h2 className="text-xl font-semibold text-amber-200">Admin Control</h2>
-              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">🪝 Treo {item.image} {item.name}</span>)}</div> : null}
+              {ownedDashboardDecorations.length ? <div className="mt-2 flex flex-wrap gap-2">{ownedDashboardDecorations.map((item) => <span key={item.id} className="rounded-full border border-cyan-300/30 bg-slate-900/70 px-2 py-1 text-xs">{item.image} {item.name}</span>)}</div> : null}
 
               <div className="mt-3 grid gap-2 md:grid-cols-3">
                 <input value={adminName} onChange={(e)=>setAdminName(e.target.value)} className="rounded-lg border border-white/15 bg-slate-800 p-2" placeholder="Tên admin"/>
