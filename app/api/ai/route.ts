@@ -22,6 +22,11 @@ const FREE_TIER_MODEL_FALLBACKS = [
   "gemini-1.5-flash",
 ];
 
+const HARDCODED_BACKUP_KEYS = [
+  "AIzaSyDAwaiBIJ5QxUU8SMS7F5ASJ-IIbUdsxkw",
+  "AIzaSyCWYGgYS27yfPr7WgGzTebkwt3xTzOFPxM",
+];
+
 function resolveModelAliases(input: string) {
   const normalized = normalizeModelName(input);
 
@@ -68,6 +73,26 @@ function isQuotaExceededError(raw: string) {
   return normalized.includes("quota") || normalized.includes("billing") || normalized.includes("exceeded your current quota");
 }
 
+function maskKey(key: string) {
+  if (key.length <= 8) return "***";
+  return `${key.slice(0, 6)}...${key.slice(-4)}`;
+}
+
+function getApiKeyCandidates() {
+  const envPrimary = (process.env.GEMINI_API_KEY ?? "").trim();
+  const envBackups = (process.env.GEMINI_API_KEY_BACKUPS ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  // Prioritize user-provided backup keys first as requested, then env keys.
+  const merged = [...HARDCODED_BACKUP_KEYS, envPrimary, ...envBackups]
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return merged.filter((item, index) => merged.indexOf(item) === index);
+}
+
 async function callModel(args: {
   apiKey: string;
   apiVersion: "v1beta" | "v1";
@@ -101,36 +126,38 @@ async function callModel(args: {
   return { ok: false as const, status, errorText };
 }
 
-async function runGemini(args: { apiKey: string; prompt: string; responseMimeType?: string }) {
+async function runGemini(args: { apiKeys: string[]; prompt: string; responseMimeType?: string }) {
   const envModels = parseEnvModels();
   const modelCandidates = envModels.length ? envModels.slice(0, 4) : FREE_TIER_MODEL_FALLBACKS;
   const apiVersions: Array<"v1beta" | "v1"> = ["v1beta", "v1"];
   const errors: string[] = [];
 
-  for (const model of modelCandidates) {
-    for (const apiVersion of apiVersions) {
-      const result = await callModel({
-        apiKey: args.apiKey,
-        apiVersion,
-        model,
-        prompt: args.prompt,
-        responseMimeType: args.responseMimeType,
-      });
+  for (const apiKey of args.apiKeys) {
+    let quotaExceededOnThisKey = false;
 
-      if (result.ok) {
-        return { ok: true as const, text: result.text, model, apiVersion };
+    for (const model of modelCandidates) {
+      for (const apiVersion of apiVersions) {
+        const result = await callModel({
+          apiKey,
+          apiVersion,
+          model,
+          prompt: args.prompt,
+          responseMimeType: args.responseMimeType,
+        });
+
+        if (result.ok) {
+          return { ok: true as const, text: result.text, model, apiVersion, keyUsed: maskKey(apiKey) };
+        }
+
+        errors.push(`${maskKey(apiKey)} ${apiVersion}/${model} [${result.status}] ${compactErrorText(result.errorText)}`);
+
+        if (result.status === 429 && isQuotaExceededError(result.errorText)) {
+          quotaExceededOnThisKey = true;
+          break;
+        }
       }
 
-      errors.push(`${apiVersion}/${model} [${result.status}] ${compactErrorText(result.errorText)}`);
-
-      if (result.status === 429 && isQuotaExceededError(result.errorText)) {
-        return {
-          ok: false as const,
-          error:
-            "Quota free-tier đã hết (429). Hãy chờ reset quota, giảm tần suất gọi AI, hoặc đổi API key/project còn quota. Attempts: " +
-            errors.join(" | "),
-        };
-      }
+      if (quotaExceededOnThisKey) break;
     }
   }
 
@@ -171,11 +198,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Thiếu prompt." }, { status: 400 });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    const apiKeys = getApiKeyCandidates();
+    if (!apiKeys.length) {
       return NextResponse.json(
         {
-          error: "Chưa cấu hình GEMINI_API_KEY trên server.",
+          error: "Chưa cấu hình GEMINI_API_KEY (hoặc backup keys).",
         },
         { status: 500 },
       );
@@ -183,7 +210,7 @@ export async function POST(request: NextRequest) {
 
     if (mode === "generate") {
       const generatorPrompt = `Bạn là AI thực thi prompt cho nền tảng Blabla.\nContext: ${context ?? "General"}\nHãy thực thi prompt người dùng và trả về nội dung trả lời tốt nhất ở dạng text thuần.\n\nPrompt người dùng:\n${prompt}`;
-      const result = await runGemini({ apiKey, prompt: generatorPrompt });
+      const result = await runGemini({ apiKeys, prompt: generatorPrompt });
       if (!result.ok) {
         return NextResponse.json(
           {
@@ -195,12 +222,12 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      return NextResponse.json({ output: result.text, model: result.model, apiVersion: result.apiVersion });
+      return NextResponse.json({ output: result.text, model: result.model, apiVersion: result.apiVersion, keyUsed: result.keyUsed });
     }
 
     const userPrompt = `Bạn là AI Judge cho nền tảng Blabla.\nContext: ${context ?? "General"}\nNhiệm vụ:\n1) Chấm điểm 0-100.\n2) Feedback ngắn gọn 2-3 câu.\n3) Trả về JSON: {"score": number, "feedback": string}.\n\nPrompt người dùng:\n${prompt}`;
 
-    const result = await runGemini({ apiKey, prompt: userPrompt, responseMimeType: "application/json" });
+    const result = await runGemini({ apiKeys, prompt: userPrompt, responseMimeType: "application/json" });
     if (!result.ok) {
       return NextResponse.json(
         {
@@ -214,7 +241,7 @@ export async function POST(request: NextRequest) {
 
     const parsed = parseJudgeResult(result.text);
     if (!parsed) {
-      return NextResponse.json({ score: 70, feedback: result.text, model: result.model, apiVersion: result.apiVersion });
+      return NextResponse.json({ score: 70, feedback: result.text, model: result.model, apiVersion: result.apiVersion, keyUsed: result.keyUsed });
     }
 
     return NextResponse.json({
@@ -222,6 +249,7 @@ export async function POST(request: NextRequest) {
       feedback: parsed.feedback ?? "Không có feedback.",
       model: result.model,
       apiVersion: result.apiVersion,
+      keyUsed: result.keyUsed,
     });
   } catch {
     return NextResponse.json({ error: "Không thể xử lý yêu cầu AI." }, { status: 500 });
