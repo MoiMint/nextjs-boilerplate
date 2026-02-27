@@ -348,6 +348,7 @@ export default function WorkspacePage() {
   const ownedDecorations = (config?.shopItems ?? []).filter((item) => (me?.ownedItemIds ?? []).includes(item.id));
   const ownedThemes = ownedDecorations.filter((item) => item.category === "dashboard-theme" && item.themeKey);
   const ownedThemeLabels = ownedThemes.map((item) => item.name);
+  const ownedNameStyles = ownedDecorations.filter((item) => item.category === "name-style" && item.nameStyleKey);
   const ownedDashboardDecorations = ownedDecorations.filter((item) => item.category === "dashboard-decoration");
   const ownedGardenDecorations = ownedDecorations.filter((item) => item.category === "garden-decoration");
   const hasNeonFrame = (me?.ownedItemIds ?? []).includes("item-neon-frame");
@@ -1100,6 +1101,46 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                             className={`rounded-lg border px-3 py-1 text-xs ${activeTheme === theme.themeKey ? activeButtonClass : idleButtonClass}`}
                           >
                             {activeTheme === theme.themeKey ? `✅ Đang dùng ${paintLabel}` : `${text.useTheme} ${paintLabel}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+                {ownedNameStyles.length ? (
+                  <div className="mt-3">
+                    <p className="mb-2 text-xs text-cyan-200">Nút chọn hiệu ứng tên:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {ownedNameStyles.map((styleItem) => {
+                        const styleKey = styleItem.nameStyleKey ?? "";
+                        const activeButtonClass = styleKey === "rainbow"
+                          ? "border-pink-300/70 bg-pink-500/20 text-pink-100"
+                          : styleKey === "fire"
+                            ? "border-orange-300/70 bg-orange-500/20 text-orange-100"
+                            : "border-cyan-300/70 bg-cyan-500/20 text-cyan-100";
+                        const idleButtonClass = styleKey === "rainbow"
+                          ? "border-pink-300/40 text-pink-100"
+                          : styleKey === "fire"
+                            ? "border-orange-300/40 text-orange-100"
+                            : "border-cyan-300/40 text-cyan-100";
+
+                        return (
+                          <button
+                            key={styleItem.id}
+                            onClick={async () => {
+                              const nextStyle = styleItem.nameStyleKey ?? null;
+                              setMe((prev) => (prev ? { ...prev, activeNameStyle: nextStyle } : prev));
+                              try {
+                                await runGameAction({ action: "set_name_style", nameStyleKey: styleItem.nameStyleKey });
+                                setShopMsg(`Đã áp dụng ${styleItem.name}.`);
+                              } catch (error) {
+                                await loadMe();
+                                setShopMsg(error instanceof Error ? error.message : "Không áp dụng được hiệu ứng tên.");
+                              }
+                            }}
+                            className={`rounded-lg border px-3 py-1 text-xs ${me?.activeNameStyle === styleItem.nameStyleKey ? activeButtonClass : idleButtonClass}`}
+                          >
+                            {me?.activeNameStyle === styleItem.nameStyleKey ? `✅ Đang dùng ${styleItem.name}` : `${text.useTheme} ${styleItem.name}`}
                           </button>
                         );
                       })}
