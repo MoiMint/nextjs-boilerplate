@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 type GeminiGenerateResponse = {
   candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  error?: { code?: number; message?: string; status?: string };
 };
 
 function normalizeModelName(name: string) {
@@ -43,7 +42,7 @@ function isRunnableTextModel(model: string) {
 }
 
 function parseEnvModels() {
-  const raw = (process.env.GEMINI_MODELS ?? "")
+  return (process.env.GEMINI_MODELS ?? "gemini-2.5-flash,gemini-2.0-flash")
     .split(",")
     .map((m) => m.trim())
     .filter(Boolean);
@@ -66,6 +65,22 @@ function compactErrorText(raw: string) {
 function isQuotaExceededError(raw: string) {
   const normalized = raw.toLowerCase();
   return normalized.includes("quota") || normalized.includes("billing") || normalized.includes("exceeded your current quota");
+}
+
+function parseApiKeys() {
+  const singlePrimary = process.env.GEMINI_API_KEY?.trim();
+  const singleBackup = process.env.GEMINI_API_KEY_BACKUP?.trim();
+  const list = (process.env.GEMINI_API_KEYS ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const merged = [singlePrimary, singleBackup, ...list].filter((item): item is string => !!item);
+  return Array.from(new Set(merged));
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function callModel(args: {
@@ -96,40 +111,45 @@ async function callModel(args: {
     return { ok: true as const, text: data.candidates?.[0]?.content?.parts?.[0]?.text ?? "" };
   }
 
-  const status = response.status;
-  const errorText = await response.text();
-  return { ok: false as const, status, errorText };
+  const retryAfterRaw = response.headers.get("retry-after");
+  const retryAfterMs = retryAfterRaw && Number.isFinite(Number(retryAfterRaw))
+    ? Math.max(0, Number(retryAfterRaw) * 1000)
+    : undefined;
+
+  return { ok: false as const, status: response.status, retryAfterMs };
 }
 
-async function runGemini(args: { apiKey: string; prompt: string; responseMimeType?: string }) {
-  const envModels = parseEnvModels();
-  const modelCandidates = envModels.length ? envModels.slice(0, 4) : FREE_TIER_MODEL_FALLBACKS;
+async function runGemini(args: { prompt: string; responseMimeType?: string }) {
+  const apiKeys = parseApiKeys();
+  const modelCandidates = parseEnvModels();
   const apiVersions: Array<"v1beta" | "v1"> = ["v1beta", "v1"];
   const errors: string[] = [];
 
-  for (const model of modelCandidates) {
-    for (const apiVersion of apiVersions) {
-      const result = await callModel({
-        apiKey: args.apiKey,
-        apiVersion,
-        model,
-        prompt: args.prompt,
-        responseMimeType: args.responseMimeType,
-      });
+  for (const apiKey of apiKeys) {
+    for (const model of modelCandidates) {
+      for (const apiVersion of apiVersions) {
+        const result = await callModel({
+          apiKey,
+          apiVersion,
+          model,
+          prompt: args.prompt,
+          responseMimeType: args.responseMimeType,
+        });
 
-      if (result.ok) {
-        return { ok: true as const, text: result.text, model, apiVersion };
-      }
+        if (result.ok) {
+          return { ok: true as const, text: result.text, model, apiVersion };
+        }
 
-      errors.push(`${apiVersion}/${model} [${result.status}] ${compactErrorText(result.errorText)}`);
+        errors.push(`${apiVersion}/${model} [${result.status}]`);
 
-      if (result.status === 429 && isQuotaExceededError(result.errorText)) {
-        return {
-          ok: false as const,
-          error:
-            "Quota free-tier đã hết (429). Hãy chờ reset quota, giảm tần suất gọi AI, hoặc đổi API key/project còn quota. Attempts: " +
-            errors.join(" | "),
-        };
+        if (result.status === 429) {
+          await wait(result.retryAfterMs ?? 1200);
+          continue;
+        }
+
+        if (result.status === 400 || result.status === 404) {
+          break;
+        }
       }
     }
   }
@@ -171,11 +191,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Thiếu prompt." }, { status: 400 });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    const keys = parseApiKeys();
+    if (!keys.length) {
       return NextResponse.json(
         {
-          error: "Chưa cấu hình GEMINI_API_KEY trên server.",
+          error: "Chưa cấu hình GEMINI_API_KEY/GEMINI_API_KEY_BACKUP/GEMINI_API_KEYS trên server.",
         },
         { status: 500 },
       );
@@ -183,12 +203,12 @@ export async function POST(request: NextRequest) {
 
     if (mode === "generate") {
       const generatorPrompt = `Bạn là AI thực thi prompt cho nền tảng Blabla.\nContext: ${context ?? "General"}\nHãy thực thi prompt người dùng và trả về nội dung trả lời tốt nhất ở dạng text thuần.\n\nPrompt người dùng:\n${prompt}`;
-      const result = await runGemini({ apiKey, prompt: generatorPrompt });
+      const result = await runGemini({ prompt: generatorPrompt });
       if (!result.ok) {
         return NextResponse.json(
           {
             error:
-              "Không gọi được model Gemini free-tier khả dụng để tạo nội dung. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS/quota. Chi tiết: " +
+              "Không gọi được model Gemini khả dụng để tạo nội dung. Hãy kiểm tra key/model access của project. Chi tiết: " +
               result.error,
           },
           { status: 502 },
@@ -200,13 +220,12 @@ export async function POST(request: NextRequest) {
 
     const userPrompt = `Bạn là AI Judge cho nền tảng Blabla.\nContext: ${context ?? "General"}\nNhiệm vụ:\n1) Chấm điểm 0-100.\n2) Feedback ngắn gọn 2-3 câu.\n3) Trả về JSON: {"score": number, "feedback": string}.\n\nPrompt người dùng:\n${prompt}`;
 
-    const result = await runGemini({ apiKey, prompt: userPrompt, responseMimeType: "application/json" });
+    const result = await runGemini({ prompt: userPrompt, responseMimeType: "application/json" });
     if (!result.ok) {
       return NextResponse.json(
         {
           error:
-            "Không gọi được model Gemini free-tier khả dụng. Hãy kiểm tra GEMINI_API_KEY/GEMINI_MODELS/quota. Chi tiết: " +
-            result.error,
+            "Không gọi được model Gemini khả dụng. Hãy kiểm tra key/model access của project. Chi tiết: " + result.error,
         },
         { status: 502 },
       );

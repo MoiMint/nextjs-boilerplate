@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromToken, readDB, writeDB } from "@/app/lib/server-db";
-import { findActiveGoal, upsertWeeklyGoalForAllUsers } from "@/app/lib/weekly-goals";
+import { findActiveGoal, upsertWeeklyGoalForAllUsers, upsertWeeklyGoalForUser } from "@/app/lib/weekly-goals";
 
 export async function GET(request: NextRequest) {
   const token = request.headers.get("x-session-token");
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
 
   const db = await readDB();
   const goal = findActiveGoal(db, user.id) ?? null;
-  return NextResponse.json({ goal, isGlobalByAdmin: true, canManage: !!user.isAdmin });
+  return NextResponse.json({ goal, canManageGlobal: !!user.isAdmin });
 }
 
 export async function POST(request: NextRequest) {
@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     targetArena?: number;
     targetAuditor?: number;
     rewardCoins?: number;
+    scope?: "self" | "global";
   };
 
   if (
@@ -34,24 +35,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Thiếu dữ liệu mục tiêu tuần." }, { status: 400 });
   }
 
-  if (!user.isAdmin) return NextResponse.json({ error: "Chỉ admin mới được đặt mục tiêu tuần cho toàn server." }, { status: 403 });
-
   const db = await readDB();
   try {
-    const { goalMap, rewardedTotal } = upsertWeeklyGoalForAllUsers(db, {
-        deadline: body.deadline,
-        targetMaster: body.targetMaster,
-        targetArena: body.targetArena,
-        targetAuditor: body.targetAuditor,
-        rewardCoins: body.rewardCoins,
-      });
+    const input = {
+      deadline: body.deadline,
+      targetMaster: body.targetMaster,
+      targetArena: body.targetArena,
+      targetAuditor: body.targetAuditor,
+      rewardCoins: body.rewardCoins,
+    };
+
+    if (body.scope === "global") {
+      if (!user.isAdmin) {
+        return NextResponse.json({ error: "Chỉ admin mới được cập nhật mục tiêu global." }, { status: 403 });
+      }
+      const { goalMap, rewardedTotal } = upsertWeeklyGoalForAllUsers(db, input);
       await writeDB(db);
-    return NextResponse.json({
-      goal: goalMap[user.id] ?? null,
-      rewarded: goalMap[user.id]?.rewardCoins ?? 0,
-      rewardedTotal,
-      broadcasted: true,
-    });
+      return NextResponse.json({ goal: goalMap[user.id] ?? null, rewardedTotal, scope: "global" });
+    }
+
+    const { goal, rewarded } = upsertWeeklyGoalForUser(db, user.id, input);
+    await writeDB(db);
+    return NextResponse.json({ goal, rewarded, scope: "self" });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Không thể cập nhật mục tiêu tuần." },

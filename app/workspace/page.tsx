@@ -40,6 +40,7 @@ export default function WorkspacePage() {
   const [goalDraft, setGoalDraft] = useState({ targetMaster: 2, targetArena: 1, targetAuditor: 1, rewardCoins: 120, deadline: "" });
   const [goalMsg, setGoalMsg] = useState("");
   const [canManageGoal, setCanManageGoal] = useState(false);
+  const [goalScope, setGoalScope] = useState<"self" | "global">("self");
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -174,9 +175,9 @@ export default function WorkspacePage() {
   const loadWeeklyGoal = useCallback(async () => {
     const res = await fetch("/api/goals", { headers: { "x-session-token": token ?? "" } });
     if (!res.ok) return;
-    const data = (await res.json()) as { goal: WeeklyGoal | null; canManage?: boolean };
+    const data = (await res.json()) as { goal: WeeklyGoal | null; canManageGlobal?: boolean };
     setWeeklyGoal(data.goal);
-    setCanManageGoal(!!data.canManage);
+    setCanManageGoal(!!data.canManageGlobal);
   }, [token]);
 
   const loadPosts = useCallback(async () => {
@@ -441,9 +442,12 @@ ${masterPrompt}`;
       body: JSON.stringify({ context: "Prompt Master Reviewer", prompt: reviewerPrompt }),
     });
     const reviewerData = (await reviewerRes.json()) as { score?: number; feedback?: string; error?: string };
-    const reviewerFeedback = reviewerRes.ok
-      ? reviewerData.feedback ?? "Reviewer chưa có phản hồi."
-      : "Reviewer tạm thời quá tải, hệ thống sẽ dùng tổng kết cuối để chấm.";
+    if (!reviewerRes.ok) {
+      setMasterResult(reviewerData.error ?? "Reviewer gặp lỗi khi gọi AI. Vui lòng thử lại.");
+      setMasterLoading(false);
+      return;
+    }
+    const reviewerFeedback = reviewerData.feedback ?? "Reviewer chưa có phản hồi.";
 
     const auditorPrompt = `Bạn là AI tổng kết biết đầy đủ bối cảnh bài học.
 Thông tin bài học:
@@ -470,12 +474,13 @@ Nhiệm vụ: tự kiểm tra output AI và phản hồi reviewer đã bám yêu
     });
 
     const finalData = (await finalRes.json()) as { score?: number; feedback?: string; error?: string };
-    const localPromptWords = masterPrompt.trim().split(/\s+/).filter(Boolean).length;
-    const localScore = Math.max(45, Math.min(92, Math.round(45 + Math.min(40, localPromptWords * 1.2))));
-    const score = finalRes.ok ? finalData.score ?? 72 : localScore;
-    const finalFeedback = finalRes.ok
-      ? finalData.feedback ?? "Không có nhận xét cuối."
-      : "AI tổng kết đang quá tải, hệ thống tạm chấm theo độ rõ ràng prompt. Bạn có thể nộp lại để lấy tổng kết AI đầy đủ.";
+    if (!finalRes.ok) {
+      setMasterResult(finalData.error ?? "AI tổng kết gặp lỗi. Vui lòng thử lại.");
+      setMasterLoading(false);
+      return;
+    }
+    const score = finalData.score ?? 72;
+    const finalFeedback = finalData.feedback ?? "Không có nhận xét cuối.";
 
     await fetch("/api/history", {
       method: "POST",
@@ -585,11 +590,12 @@ ${auditorRePrompt}`;
       body: JSON.stringify({ context: "AI Auditor Correction", mode: "generate", prompt: correctedAnswerPrompt }),
     });
     const correctionData = (await correctionRes.json()) as { output?: string; error?: string };
-    const correctedAnswer = correctionRes.ok && correctionData.output?.trim()
-      ? correctionData.output
-      : `${auditorRePrompt}
-
-(Tạm dùng prompt sửa của bạn do AI quá tải ở bước sinh câu trả lời.)`;
+    if (!correctionRes.ok || !correctionData.output?.trim()) {
+      setAuditorResult(correctionData.error ?? "AI không tạo được câu trả lời sửa. Vui lòng thử lại.");
+      setAuditorLoading(false);
+      return;
+    }
+    const correctedAnswer = correctionData.output;
 
     const judgePrompt = `Danh sách lỗi đúng cần tìm: ${scenario.requiredIssues.join(", ")}
 Người dùng phát hiện lỗi: ${auditorIssues}
@@ -604,17 +610,14 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     });
 
     const data = (await res.json()) as { score?: number; feedback?: string; error?: string };
-    const fallbackScore = (() => {
-      const combined = `${auditorIssues} ${correctedAnswer}`.toLowerCase();
-      const hits = scenario.requiredIssues.filter((item) => combined.includes(item.toLowerCase())).length;
-      const ratio = scenario.requiredIssues.length ? hits / scenario.requiredIssues.length : 0.5;
-      return Math.max(55, Math.min(95, Math.round(55 + ratio * 40)));
-    })();
+    if (!res.ok) {
+      setAuditorResult(data.error ?? "AI chấm điểm Auditor gặp lỗi. Vui lòng thử lại.");
+      setAuditorLoading(false);
+      return;
+    }
 
-    const score = res.ok ? (data.score ?? 75) : fallbackScore;
-    const feedback = res.ok
-      ? (data.feedback ?? "Không có nhận xét.")
-      : "AI chấm điểm đang quá tải, hệ thống tạm chấm theo mức độ khớp lỗi bạn phát hiện. Bạn có thể gửi lại để lấy chấm điểm AI đầy đủ.";
+    const score = data.score ?? 75;
+    const feedback = data.feedback ?? "Không có nhận xét.";
 
     await fetch("/api/history", {
       method: "POST",
@@ -639,16 +642,20 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     const res = await fetch("/api/goals", {
       method: "POST",
       headers: authHeaders,
-      body: JSON.stringify(goalDraft),
+      body: JSON.stringify({ ...goalDraft, scope: goalScope }),
     });
-    const data = (await res.json()) as { error?: string; rewarded?: number; goal?: WeeklyGoal | null; broadcasted?: boolean };
+    const data = (await res.json()) as { error?: string; rewarded?: number; rewardedTotal?: number; goal?: WeeklyGoal | null; scope?: "self" | "global" };
     if (!res.ok) {
       setGoalMsg(data.error ?? "Không lưu được mục tiêu tuần.");
       return;
     }
 
     setWeeklyGoal(data.goal ?? null);
-    setGoalMsg(data.broadcasted ? "Đã cập nhật mục tiêu tuần cho toàn server." : (data.rewarded ? `Mục tiêu hoàn tất! +${data.rewarded} coin thưởng tuần.` : "Đã cập nhật mục tiêu tuần."));
+    if (data.scope === "global") {
+      setGoalMsg(`Đã cập nhật mục tiêu tuần global cho toàn server.${typeof data.rewardedTotal === "number" && data.rewardedTotal > 0 ? ` Tổng thưởng đã phát: ${data.rewardedTotal} coin.` : ""}`);
+    } else {
+      setGoalMsg(data.rewarded ? `Mục tiêu hoàn tất! +${data.rewarded} coin thưởng tuần.` : "Đã cập nhật mục tiêu tuần của bạn.");
+    }
     await loadMe();
   };
 
@@ -1037,7 +1044,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-amber-200">Weekly Goals</p>
-                    <p className="text-xs text-slate-300">{canManageGoal ? `Admin đặt mục tiêu tuần chung cho toàn server.` : "Mục tiêu tuần do admin đặt cho toàn server."} Thưởng {goalDraft.rewardCoins} coin khi hoàn thành.</p>
+                    <p className="text-xs text-slate-300">{canManageGoal ? "Bạn có thể đặt mục tiêu cho bản thân hoặc toàn server." : "Bạn có thể tự đặt mục tiêu tuần của mình."} Thưởng {goalDraft.rewardCoins} coin khi hoàn thành.</p>
                   </div>
                   <p className="text-xs text-amber-100">{weeklyGoal?.deadline ? `Deadline: ${weeklyGoal.deadline.slice(0, 10)}` : "Chưa đặt"}</p>
                 </div>
@@ -1045,18 +1052,23 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   <div className="h-full rounded-full bg-amber-300 transition-all" style={{ width: `${weeklyGoalPercent}%` }} />
                 </div>
                 <p className="mt-2 text-xs text-amber-100">Tiến độ: {weeklyGoalProgress}/{weeklyGoalTotal} ({weeklyGoalPercent}%) • Master {weeklyGoal?.progressMaster ?? 0}/{goalDraft.targetMaster} • Arena {weeklyGoal?.progressArena ?? 0}/{goalDraft.targetArena} • Auditor {weeklyGoal?.progressAuditor ?? 0}/{goalDraft.targetAuditor}</p>
+                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
+                  <label className="space-y-1"><span>Master</span><input type="number" min={0} value={goalDraft.targetMaster} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetMaster: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                  <label className="space-y-1"><span>Arena</span><input type="number" min={0} value={goalDraft.targetArena} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetArena: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                  <label className="space-y-1"><span>Auditor</span><input type="number" min={0} value={goalDraft.targetAuditor} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetAuditor: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                  <label className="space-y-1"><span>Coin thưởng</span><input type="number" min={0} value={goalDraft.rewardCoins} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, rewardCoins: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                  <label className="space-y-1"><span>Deadline</span><input type="date" value={goalDraft.deadline} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, deadline: e.target.value }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
+                </div>
                 {canManageGoal ? (
-                  <>
-                    <div className="mt-3 grid gap-2 text-xs sm:grid-cols-5">
-                      <label className="space-y-1"><span>Master</span><input type="number" min={0} value={goalDraft.targetMaster} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetMaster: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
-                      <label className="space-y-1"><span>Arena</span><input type="number" min={0} value={goalDraft.targetArena} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetArena: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
-                      <label className="space-y-1"><span>Auditor</span><input type="number" min={0} value={goalDraft.targetAuditor} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, targetAuditor: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
-                      <label className="space-y-1"><span>Coin thưởng</span><input type="number" min={0} value={goalDraft.rewardCoins} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, rewardCoins: Number(e.target.value) }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
-                      <label className="space-y-1"><span>Deadline</span><input type="date" value={goalDraft.deadline} onChange={(e)=>setGoalDraft((prev)=>({ ...prev, deadline: e.target.value }))} className="w-full rounded border border-white/20 bg-slate-900 px-2 py-1" /></label>
-                    </div>
-                    <button onClick={() => void saveWeeklyGoal()} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-100">Lưu mục tiêu tuần cho toàn server</button>
-                  </>
+                  <label className="mt-2 inline-flex items-center gap-2 text-xs">
+                    <span>Phạm vi:</span>
+                    <select value={goalScope} onChange={(e)=>setGoalScope(e.target.value as "self" | "global")} className="rounded border border-white/20 bg-slate-900 px-2 py-1">
+                      <option value="self">Chỉ mình tôi</option>
+                      <option value="global">Toàn server (admin)</option>
+                    </select>
+                  </label>
                 ) : null}
+                <button onClick={() => void saveWeeklyGoal()} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-100">Lưu mục tiêu tuần</button>
                 {goalMsg ? <p className="mt-2 text-xs text-amber-100">{goalMsg}</p> : null}
               </div>
 
