@@ -442,9 +442,12 @@ ${masterPrompt}`;
       body: JSON.stringify({ context: "Prompt Master Reviewer", prompt: reviewerPrompt }),
     });
     const reviewerData = (await reviewerRes.json()) as { score?: number; feedback?: string; error?: string };
-    const reviewerFeedback = reviewerRes.ok
-      ? reviewerData.feedback ?? "Reviewer chưa có phản hồi."
-      : "Reviewer tạm thời quá tải, hệ thống sẽ dùng tổng kết cuối để chấm.";
+    if (!reviewerRes.ok) {
+      setMasterResult(reviewerData.error ?? "Reviewer gặp lỗi khi gọi AI. Vui lòng thử lại.");
+      setMasterLoading(false);
+      return;
+    }
+    const reviewerFeedback = reviewerData.feedback ?? "Reviewer chưa có phản hồi.";
 
     const auditorPrompt = `Bạn là AI tổng kết biết đầy đủ bối cảnh bài học.
 Thông tin bài học:
@@ -471,12 +474,13 @@ Nhiệm vụ: tự kiểm tra output AI và phản hồi reviewer đã bám yêu
     });
 
     const finalData = (await finalRes.json()) as { score?: number; feedback?: string; error?: string };
-    const localPromptWords = masterPrompt.trim().split(/\s+/).filter(Boolean).length;
-    const localScore = Math.max(45, Math.min(92, Math.round(45 + Math.min(40, localPromptWords * 1.2))));
-    const score = finalRes.ok ? finalData.score ?? 72 : localScore;
-    const finalFeedback = finalRes.ok
-      ? finalData.feedback ?? "Không có nhận xét cuối."
-      : "AI tổng kết đang quá tải, hệ thống tạm chấm theo độ rõ ràng prompt. Bạn có thể nộp lại để lấy tổng kết AI đầy đủ.";
+    if (!finalRes.ok) {
+      setMasterResult(finalData.error ?? "AI tổng kết gặp lỗi. Vui lòng thử lại.");
+      setMasterLoading(false);
+      return;
+    }
+    const score = finalData.score ?? 72;
+    const finalFeedback = finalData.feedback ?? "Không có nhận xét cuối.";
 
     await fetch("/api/history", {
       method: "POST",
@@ -586,11 +590,12 @@ ${auditorRePrompt}`;
       body: JSON.stringify({ context: "AI Auditor Correction", mode: "generate", prompt: correctedAnswerPrompt }),
     });
     const correctionData = (await correctionRes.json()) as { output?: string; error?: string };
-    const correctedAnswer = correctionRes.ok && correctionData.output?.trim()
-      ? correctionData.output
-      : `${auditorRePrompt}
-
-(Tạm dùng prompt sửa của bạn do AI quá tải ở bước sinh câu trả lời.)`;
+    if (!correctionRes.ok || !correctionData.output?.trim()) {
+      setAuditorResult(correctionData.error ?? "AI không tạo được câu trả lời sửa. Vui lòng thử lại.");
+      setAuditorLoading(false);
+      return;
+    }
+    const correctedAnswer = correctionData.output;
 
     const judgePrompt = `Danh sách lỗi đúng cần tìm: ${scenario.requiredIssues.join(", ")}
 Người dùng phát hiện lỗi: ${auditorIssues}
@@ -605,17 +610,14 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     });
 
     const data = (await res.json()) as { score?: number; feedback?: string; error?: string };
-    const fallbackScore = (() => {
-      const combined = `${auditorIssues} ${correctedAnswer}`.toLowerCase();
-      const hits = scenario.requiredIssues.filter((item) => combined.includes(item.toLowerCase())).length;
-      const ratio = scenario.requiredIssues.length ? hits / scenario.requiredIssues.length : 0.5;
-      return Math.max(55, Math.min(95, Math.round(55 + ratio * 40)));
-    })();
+    if (!res.ok) {
+      setAuditorResult(data.error ?? "AI chấm điểm Auditor gặp lỗi. Vui lòng thử lại.");
+      setAuditorLoading(false);
+      return;
+    }
 
-    const score = res.ok ? (data.score ?? 75) : fallbackScore;
-    const feedback = res.ok
-      ? (data.feedback ?? "Không có nhận xét.")
-      : "AI chấm điểm đang quá tải, hệ thống tạm chấm theo mức độ khớp lỗi bạn phát hiện. Bạn có thể gửi lại để lấy chấm điểm AI đầy đủ.";
+    const score = data.score ?? 75;
+    const feedback = data.feedback ?? "Không có nhận xét.";
 
     await fetch("/api/history", {
       method: "POST",
