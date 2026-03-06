@@ -99,6 +99,7 @@ export default function WorkspacePage() {
   const [newArenaGolden, setNewArenaGolden] = useState("");
 
   const [shopMsg, setShopMsg] = useState("");
+  const [promptMasterMsg, setPromptMasterMsg] = useState("");
   const [gardenMsg, setGardenMsg] = useState("");
   const [nowTick, setNowTick] = useState(0);
   const [courseCreateTitle, setCourseCreateTitle] = useState("");
@@ -776,10 +777,10 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
   const buyLesson = async (lessonId: string) => {
     try {
       await runGameAction({ action: "buy_lesson", lessonId });
-      setShopMsg("Mua khóa học thành công. Đã mở khóa vĩnh viễn!");
+      setPromptMasterMsg("Mua khóa học thành công. Đã mở khóa vĩnh viễn!");
       playUiSound(780);
     } catch (error) {
-      setShopMsg(error instanceof Error ? error.message : "Mua khóa thất bại.");
+      setPromptMasterMsg(error instanceof Error ? error.message : "Mua khóa thất bại.");
     }
   };
 
@@ -806,7 +807,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           samplePrompt: courseCreateSample,
         },
       });
-      setShopMsg(data.message ?? "Đã gửi khóa học chờ duyệt.");
+      setPromptMasterMsg(data.message ?? "Đã gửi khóa học chờ duyệt.");
       setCourseCreateTitle("");
       setCourseCreateTopic("");
       setCourseCreateSituation("");
@@ -816,7 +817,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
       setCourseCreateSample("");
       playUiSound(650);
     } catch (error) {
-      setShopMsg(error instanceof Error ? error.message : "Không gửi được khóa học.");
+      setPromptMasterMsg(error instanceof Error ? error.message : "Không gửi được khóa học.");
     }
   };
 
@@ -889,6 +890,18 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     setShowLearningModal(true);
   };
 
+  const applyNameStyle = async (styleItem: AppConfig["shopItems"][number]) => {
+    const nextStyle = styleItem.nameStyleKey ?? null;
+    setMe((prev) => (prev ? { ...prev, activeNameStyle: nextStyle } : prev));
+    try {
+      await runGameAction({ action: "set_name_style", nameStyleKey: styleItem.nameStyleKey });
+      setShopMsg(`Đã áp dụng ${styleItem.name}.`);
+    } catch (error) {
+      await loadMe();
+      setShopMsg(error instanceof Error ? error.message : "Không áp dụng được hiệu ứng tên.");
+    }
+  };
+
   const saveLessonEditor = async () => {
     if (!lessonEditDraft) return;
     await patchConfig({
@@ -904,7 +917,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
         price: lessonEditDraft.price ?? 0,
       },
     });
-    setShopMsg("Đã cập nhật bài học.");
+    setPromptMasterMsg("Đã cập nhật bài học.");
     setLessonMenuId("");
     setLessonEditDraft(null);
   };
@@ -1021,10 +1034,21 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                       <p className="font-semibold">{item.name}</p>
                       <p className="text-xs text-slate-300">{item.effect}</p>
                       <p className="mt-1 text-xs text-amber-300">{item.price} Coin</p>
-                      <button onClick={() => void buyItem(item.id)} disabled={gameActionLoading} className="mt-2 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-200 disabled:opacity-50">{text.buy}</button>
+                      {item.category === "name-style" && (me?.ownedItemIds ?? []).includes(item.id) ? (
+                        <button
+                          onClick={() => void applyNameStyle(item)}
+                          disabled={gameActionLoading}
+                          className="mt-2 rounded-lg border border-cyan-300/40 px-3 py-1 text-xs text-cyan-200 disabled:opacity-50"
+                        >
+                          {me?.activeNameStyle === item.nameStyleKey ? `✅ Đang dùng ${item.name}` : `Sử dụng ${item.name}`}
+                        </button>
+                      ) : (
+                        <button onClick={() => void buyItem(item.id)} disabled={gameActionLoading} className="mt-2 rounded-lg border border-amber-300/40 px-3 py-1 text-xs text-amber-200 disabled:opacity-50">{text.buy}</button>
+                      )}
                     </div>
                   ))}
                 </div>
+                {shopMsg ? <p className="mt-2 text-xs text-amber-200">{shopMsg}</p> : null}
               </div>
 
               <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-500/10 p-4">
@@ -1127,17 +1151,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                         return (
                           <button
                             key={styleItem.id}
-                            onClick={async () => {
-                              const nextStyle = styleItem.nameStyleKey ?? null;
-                              setMe((prev) => (prev ? { ...prev, activeNameStyle: nextStyle } : prev));
-                              try {
-                                await runGameAction({ action: "set_name_style", nameStyleKey: styleItem.nameStyleKey });
-                                setShopMsg(`Đã áp dụng ${styleItem.name}.`);
-                              } catch (error) {
-                                await loadMe();
-                                setShopMsg(error instanceof Error ? error.message : "Không áp dụng được hiệu ứng tên.");
-                              }
-                            }}
+                            onClick={() => void applyNameStyle(styleItem)}
                             className={`rounded-lg border px-3 py-1 text-xs ${me?.activeNameStyle === styleItem.nameStyleKey ? activeButtonClass : idleButtonClass}`}
                           >
                             {me?.activeNameStyle === styleItem.nameStyleKey ? `✅ Đang dùng ${styleItem.name}` : `${text.useTheme} ${styleItem.name}`}
@@ -1192,7 +1206,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   </div>
                 ))}
               </div>
-              {shopMsg ? <p className="mt-2 text-xs text-amber-200">{shopMsg}</p> : null}
+              {promptMasterMsg ? <p className="mt-2 text-xs text-amber-200">{promptMasterMsg}</p> : null}
               {lessonMenuId && lessonEditDraft ? (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
                   <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-white/15 bg-slate-950/95 p-3 text-xs">
@@ -1209,7 +1223,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button onClick={saveLessonEditor} className="rounded-lg border border-cyan-300/40 px-3 py-2 text-cyan-200">Lưu</button>
-                    <button onClick={async ()=>{ if (!window.confirm("Bạn chắc chưa? Xóa bài học này sẽ không thể hoàn tác.")) return; await patchConfig({ deleteLessonId: lessonMenuId }); setLessonMenuId(""); setLessonEditDraft(null); setShopMsg("Đã xóa bài học."); }} className="rounded-lg border border-rose-300/40 px-3 py-2 text-rose-300">Xóa</button>
+                    <button onClick={async ()=>{ if (!window.confirm("Bạn chắc chưa? Xóa bài học này sẽ không thể hoàn tác.")) return; await patchConfig({ deleteLessonId: lessonMenuId }); setLessonMenuId(""); setLessonEditDraft(null); setPromptMasterMsg("Đã xóa bài học."); }} className="rounded-lg border border-rose-300/40 px-3 py-2 text-rose-300">Xóa</button>
                     <button onClick={()=>{ setLessonMenuId(""); setLessonEditDraft(null); }} className="rounded-lg border border-white/20 px-3 py-2">Đóng</button>
                   </div>
                   </div>
