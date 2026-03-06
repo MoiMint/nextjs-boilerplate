@@ -932,10 +932,25 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
     }
   }, [config, selectedLessonId]);
 
+  const navTabs = (["dashboard", "promptmaster", "arena", "auditor", "history", "community", "garden", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]);
+  const mobileBottomTabs = (["dashboard", "promptmaster", "community", "garden", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]);
+
+  const handleLogout = async () => {
+    const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    if (sessionToken) {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "x-session-token": sessionToken },
+      });
+    }
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    router.push("/login");
+  };
+
   return (
-    <main className={`min-h-screen overflow-x-hidden bg-gradient-to-br px-3 py-4 text-slate-100 md:px-8 md:py-8 ${appThemeClass}`}>
+    <main className={`min-h-screen overflow-x-hidden bg-gradient-to-br px-3 py-4 pb-24 text-slate-100 md:px-8 md:py-8 md:pb-8 ${appThemeClass}`}>
       <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[260px_1fr]">
-        <aside className={`rounded-2xl border p-4 ${themeClass}`}>
+        <aside className={`hidden rounded-2xl border p-4 md:block ${themeClass}`}>
           <h1 className={`text-lg font-bold ${getNameStyleClass(me?.activeNameStyle)}`}>{me?.name ?? "Loading..."}</h1>
           <p className="text-sm text-slate-300">{me?.email}</p>
           <p className="mt-1 text-xs text-cyan-300">Chuỗi đăng nhập: {me?.loginStreak ?? 0} ngày</p>
@@ -945,7 +960,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           </div>
 
           <div className="mt-5 grid grid-cols-2 gap-2 md:block md:space-y-2">
-            {(["dashboard", "promptmaster", "arena", "auditor", "history", "community", "garden", ...(me?.isAdmin ? ["admin"] : [])] as Tab[]).map((key) => (
+            {navTabs.map((key) => (
               <button
                 key={key}
                 onClick={() => { playUiSound(480); setActiveTab(key); }}
@@ -959,16 +974,8 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           </div>
 
           <button
-            onClick={async () => {
-              const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
-              if (sessionToken) {
-                await fetch("/api/auth/logout", {
-                  method: "POST",
-                  headers: { "x-session-token": sessionToken },
-                });
-              }
-              localStorage.removeItem(SESSION_TOKEN_KEY);
-              router.push("/login");
+            onClick={() => {
+              void handleLogout();
             }}
             className="mt-6 w-full rounded-lg border border-white/20 px-3 py-2"
           >
@@ -982,7 +989,26 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           </button>
         </aside>
 
-        <section className={`space-y-4 break-words rounded-2xl border p-4 md:max-h-[84vh] md:overflow-y-auto scrollbar-pro ${themeClass}`}>
+        <section className={`space-y-4 break-words rounded-2xl border p-3 md:p-4 md:max-h-[84vh] md:overflow-y-auto scrollbar-pro ${themeClass}`}>
+          <div className="rounded-xl border border-cyan-300/20 bg-slate-900/55 p-3 md:hidden">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className={`text-base font-bold ${getNameStyleClass(me?.activeNameStyle)}`}>{me?.name ?? "Loading..."}</p>
+                <p className="text-xs text-slate-300">{me?.email}</p>
+                <p className="mt-1 text-xs text-cyan-300">{TAB_LABELS[locale][activeTab]}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[11px] text-slate-400">Endless Coin</p>
+                <p className="text-lg font-semibold text-yellow-300">{me?.coins ?? 0}</p>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <button onClick={() => setLocale("vi")} className={`rounded-md border px-2 py-1 text-xs ${locale === "vi" ? "border-cyan-300 text-cyan-200" : "border-white/20 text-slate-300"}`}>VN</button>
+              <button onClick={() => setLocale("en")} className={`rounded-md border px-2 py-1 text-xs ${locale === "en" ? "border-cyan-300 text-cyan-200" : "border-white/20 text-slate-300"}`}>ENG</button>
+              <button onClick={() => setShowFeedbackModal(true)} className="ml-auto rounded-md border border-cyan-300/40 px-2 py-1 text-xs text-cyan-200">{text.feedback}</button>
+              <button onClick={() => { void handleLogout(); }} className="rounded-md border border-white/20 px-2 py-1 text-xs">{text.logout}</button>
+            </div>
+          </div>
           {ownedDashboardDecorations.length ? (
             <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-cyan-300/20 bg-slate-900/35 px-3 py-2">
               {ownedDashboardDecorations.map((item) => (
@@ -990,7 +1016,7 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
               ))}
             </div>
           ) : null}
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Điểm trung bình</p><p className="text-2xl font-bold">{avgScore}%</p></div>
             <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Số ngày đăng nhập</p><p className="text-2xl font-bold">{me?.totalLoginDays ?? 0}</p></div>
             <div className={`rounded-xl border p-4 ${themeClass}`}><p className="text-xs">Chuỗi hiện tại</p><p className="text-2xl font-bold text-emerald-300">{me?.loginStreak ?? 0} ngày</p></div>
@@ -1739,6 +1765,24 @@ Hãy chấm theo rubric AI Auditor, ưu tiên kiểm tra câu trả lời mới 
           )}
         </section>
       </div>
+
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-cyan-300/20 bg-slate-950/95 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur md:hidden">
+        <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto pb-1">
+          {mobileBottomTabs.map((key) => (
+            <button
+              key={`mobile-${key}`}
+              onClick={() => {
+                playUiSound(480);
+                setActiveTab(key);
+              }}
+              className={`min-w-[88px] flex-1 rounded-lg px-2 py-2 text-[11px] font-medium ${activeTab === key ? "border border-cyan-300/50 bg-cyan-500/20 text-cyan-100" : "border border-white/10 bg-slate-900/70 text-slate-300"}`}
+            >
+              {TAB_LABELS[locale][key]}
+            </button>
+          ))}
+        </div>
+      </nav>
+
       {showFeedbackModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-lg rounded-2xl border border-cyan-300/30 bg-slate-900 p-4">
